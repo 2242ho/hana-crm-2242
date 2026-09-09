@@ -349,6 +349,8 @@
   let view = 'list';        // list | detail | sheet | docs | sites | siteEdit | balanceDash | bulkSms
   let currentId = null;
   let branchCustomMode = false;
+  let expandedMemoId = null;
+  let detailReturnView = 'list';
   let query = '';
   let stateReady = false;
   let apartmentSites = [];
@@ -1316,8 +1318,9 @@
             ${c.receivingBranch?`<span class="badge badge-gray">접수 ${escapeHtml(c.receivingBranch)}</span>`:''}
             ${c.referralSource?`<span class="badge badge-gray">${c.referralSource}${(c.referralSource==='부동산소장님 소개' && c.realtorName)?' · '+escapeHtml(c.realtorName):''}</span>`:''}
             ${c.lawyerReferral?`<span class="badge badge-gray">법무사연계${c.lawyerName?' · '+escapeHtml(c.lawyerName):''}${c.lawyerWorkType?' ('+c.lawyerWorkType+')':''}</span>`:''}
-            ${c.memo?`<span class="badge badge-amber">📝 메모</span>`:''}
+            ${c.memo?`<span class="badge badge-amber badge-memo" data-memo-id="${c.id}" style="cursor:pointer;">📝 메모${expandedMemoId===c.id?' ▲':' ▼'}</span>`:''}
           </div>` : ''}
+          ${(c.memo && expandedMemoId===c.id) ? `<div class="memo-preview" data-memo-id="${c.id}" style="margin-top:7px;background:#FFF8E8;border:1px solid #F0D89A;border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.5;color:#5A4620;white-space:pre-wrap;word-break:break-word;">${escapeHtml(c.memo)}</div>` : ''}
           <div class="card-meta">
             <span>대출자서 <b>${fmtDT(c.consultDate)||'-'}</b></span>
             ${c.balanceDate?`<span>잔금일 <b>${c.balanceDate} (${ddLabel})</b></span>`:''}
@@ -1362,7 +1365,18 @@
       render();
     };
     document.querySelectorAll('.card').forEach(el=>{
-      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; render(); };
+      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render(); };
+    });
+    document.querySelectorAll('.badge-memo').forEach(el=>{
+      el.onclick = (e)=>{
+        e.stopPropagation();
+        const id = el.getAttribute('data-memo-id');
+        expandedMemoId = (expandedMemoId===id) ? null : id;
+        renderList();
+      };
+    });
+    document.querySelectorAll('.memo-preview').forEach(el=>{
+      el.onclick = (e)=>{ e.stopPropagation(); };
     });
     document.getElementById('btn-export').onclick = ()=> exportBackup();
     const bulkCompleteBtn = document.getElementById('btn-bulk-complete');
@@ -1927,7 +1941,7 @@
     const toEl = document.getElementById('f-dash-to');
     if(toEl) toEl.onchange = (e)=>{ dashFilter.to = e.target.value; render(); };
     document.querySelectorAll('#app-root .card[data-id]').forEach(el=>{
-      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; render(); };
+      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; detailReturnView = 'balanceDash'; render(); };
     });
   }
 
@@ -2469,7 +2483,7 @@
         renderDetail();
       };
     });
-    document.getElementById('btn-back').onclick = ()=>{ readForm(); saveCustomers(false); view='list'; render(); };
+    document.getElementById('btn-back').onclick = ()=>{ readForm(); saveCustomers(false); view=detailReturnView; render(); };
     const openSheetBtn = document.getElementById('btn-open-sheet');
     if(openSheetBtn) openSheetBtn.onclick = ()=>{ readForm(); saveCustomers(false); view='sheet'; render(); };
     const openDocsBtn = document.getElementById('btn-open-docs');
