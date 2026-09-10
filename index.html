@@ -320,13 +320,12 @@
   .sheet-table tr.method-row{cursor:pointer;}
   .sheet-table tr.method-selected td{background:var(--gold-dim);font-weight:800;color:var(--navy-950);}
   .sheet-table tr.method-selected td:first-child{color:#8A5A00;}
-  .sheet-draw-print-only{display:none;}
+  .sheet-draw-print-only{position:absolute;top:0;left:0;opacity:0;pointer-events:none;background-repeat:no-repeat;background-size:100% 100%;}
   @media print{
     .no-print{display:none !important;}
     .sheet-page{max-width:100%;padding:0;}
     body{background:#fff;}
-    .sheet-draw-print-only{display:block;position:absolute;top:0;left:0;pointer-events:none;}
-    .sheet-draw-print-only img{width:100%;height:100%;display:block;}
+    .sheet-draw-print-only{opacity:1;}
   }
 
   /* ---------- Tablet / larger screens (e.g. Galaxy Tab S9) ---------- */
@@ -3156,7 +3155,7 @@
         ` : ''}
       </div>
       <div class="sheet-draw-wrap" id="sheet-draw-wrap">
-        <div class="sheet-page sheet-watermark-bg" id="sheet-capture-target">${body}<canvas class="sheet-draw-canvas no-print ${sheetDrawOn?'on':''}" id="sheet-draw-canvas"></canvas>${c.sheetDrawing?`<div class="sheet-draw-print-only" id="sheet-draw-print-only"><img src="${c.sheetDrawing}" alt="손글씨 메모"/></div>`:''}</div>
+        <div class="sheet-page sheet-watermark-bg" id="sheet-capture-target">${body}<canvas class="sheet-draw-canvas no-print ${sheetDrawOn?'on':''}" id="sheet-draw-canvas"></canvas>${c.sheetDrawing?`<div class="sheet-draw-print-only" id="sheet-draw-print-only" style="background-image:url('${c.sheetDrawing}');"></div>`:''}</div>
       </div>
       <div class="disclaimer no-print">이 상담표는 참고용으로 자동 계산되며, 실제 금리·한도·비용은 대출실행일 기준 은행 심사 결과에 따라 달라질 수 있습니다.${sheetDrawOn?' 손글씨 메모는 저장되며, 다음에 다시 열어도 유지됩니다.':''}</div>
       <div style="height:76px;" class="no-print"></div>
