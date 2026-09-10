@@ -1219,6 +1219,22 @@
     return d!==null && d<0;
   }
   function balancePassedList(){ return customers.filter(isBalancePassed); }
+  function localToday(){
+    const t = new Date();
+    const y = t.getFullYear(); const m = String(t.getMonth()+1).padStart(2,'0'); const d = String(t.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  let homeDateFilter = { date: localToday(), showBalance: true, showConsult: false };
+  function homeDateResults(){
+    const { date, showBalance, showConsult } = homeDateFilter;
+    const out = [];
+    customers.forEach(c=>{
+      const balanceHit = showBalance && c.balanceDate === date;
+      const consultHit = showConsult && c.consultDate && c.consultDate.slice(0,10) === date;
+      if(balanceHit || consultHit) out.push({ c, balanceHit, consultHit });
+    });
+    return out;
+  }
 
   function customerSearchBlob(c){
     return [c.name, allPhones(c).join(' '), c.apartmentName, c.unitNumber, c.receivingBranch, c.realtorName]
@@ -1265,6 +1281,21 @@
           <button id="btn-import-replace" style="background:none;border:none;color:var(--ink-dim);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;">기존 목록 전체교체로 불러오기</button>
         </div>
         ${backupNoticeHtml()}
+        ${(()=>{
+          const results = homeDateResults();
+          const { date, showBalance, showConsult } = homeDateFilter;
+          return `<div style="background:#FFF4E5;border:1.5px solid var(--amber);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#5A3E00;">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="f-home-date" value="${escapeAttr(date)}" style="border:1.5px solid var(--amber);border-radius:6px;padding:4px 6px;font-size:12px;"/>
+              <span class="badge home-date-toggle" data-type="balance" style="cursor:pointer;background:${showBalance?'var(--amber)':'#fff'};color:${showBalance?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">잔금일${showBalance?' ✓':''}</span>
+              <span class="badge home-date-toggle" data-type="consult" style="cursor:pointer;background:${showConsult?'var(--amber)':'#fff'};color:${showConsult?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">대출자서일${showConsult?' ✓':''}</span>
+            </div>
+            ${results.length===0 ? `<div style="margin-top:8px;color:#8A6A20;">선택한 날짜·조건에 해당하는 고객이 없어요.</div>` : `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+              ${results.map(({c,balanceHit,consultHit})=>`<span class="badge today-balance-chip" data-id="${c.id}" style="cursor:pointer;background:#fff;border:1.5px solid var(--amber);color:#5A3E00;">${escapeHtml(c.name)||'이름 미입력'}${c.apartmentName?' · '+escapeHtml(c.apartmentName)+(c.unitNumber?' '+escapeHtml(c.unitNumber):''):''}${balanceHit&&consultHit?' (잔금·자서)':balanceHit?' (잔금)':consultHit?' (자서)':''}</span>`).join('')}
+            </div>`}
+          </div>`;
+        })()}
         ${(()=>{
           const passed = balancePassedList();
           if(passed.length===0) return '';
@@ -1364,6 +1395,22 @@
       saveCustomers(false);
       render();
     };
+    const homeDateEl = document.getElementById('f-home-date');
+    if(homeDateEl) homeDateEl.onchange = (e)=>{ homeDateFilter.date = e.target.value; renderList(); };
+    document.querySelectorAll('.home-date-toggle').forEach(el=>{
+      el.onclick = ()=>{
+        const t = el.getAttribute('data-type');
+        if(t==='balance') homeDateFilter.showBalance = !homeDateFilter.showBalance;
+        else if(t==='consult') homeDateFilter.showConsult = !homeDateFilter.showConsult;
+        renderList();
+      };
+    });
+    document.querySelectorAll('.today-balance-chip').forEach(el=>{
+      el.onclick = (e)=>{
+        e.stopPropagation();
+        currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render();
+      };
+    });
     document.querySelectorAll('.card').forEach(el=>{
       el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render(); };
     });
