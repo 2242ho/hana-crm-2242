@@ -270,8 +270,11 @@
   /* 상담표 sheet view */
   .sheet-page{background:#fff;color:#111;font-family:var(--sans);max-width:820px;margin:0 auto;padding:4px 2px 40px;position:relative;}
   .sheet-page-break{page-break-before:always;break-before:page;height:0;}
-  .sheet-watermark{position:absolute;top:0;left:0;width:100%;height:9000px;z-index:-1;pointer-events:none;overflow:hidden;}
-  .sheet-watermark span{position:absolute;white-space:nowrap;font-size:13px;font-weight:700;color:rgba(17,24,39,0.08);letter-spacing:1px;}
+  .sheet-watermark-bg{
+    background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27260%27%20height%3D%27160%27%3E%3Ctext%20x%3D%27-10%27%20y%3D%2795%27%20font-family%3D%27sans-serif%27%20font-size%3D%2713%27%20font-weight%3D%27700%27%20fill%3D%27rgba%2817%2C24%2C39%2C0.09%29%27%20transform%3D%27rotate%28-28%20130%2080%29%27%3E%ED%95%98%EB%82%98%EC%9D%80%ED%96%89%EB%8C%80%EC%B6%9C%EC%83%81%EB%8B%B4%EC%82%AC%20%EC%86%A1%EB%AA%85%ED%98%B8%3C/text%3E%3C/svg%3E");
+    background-repeat:repeat;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;
+  }
   .sheet-footer-disclaimer{margin:24px 12px 0;padding:10px 12px;border-top:1px solid #D8DCE6;font-size:10.5px;color:#555;line-height:1.6;text-align:center;}
   .sheet-draw-wrap{position:relative;max-width:820px;margin:0 auto;}
   .sheet-draw-wrap .sheet-page{margin:0;}
@@ -2877,19 +2880,6 @@
       </div>
     `;
   }
-  function sheetWatermarkHtml(){
-    const text = '하나은행대출상담사 송명호';
-    const rows = 100, cols = 3;
-    let cells = '';
-    for(let r=0;r<rows;r++){
-      for(let c2=0;c2<cols;c2++){
-        const top = r*90;
-        const left = (c2*260) + (r%2===0?0:130);
-        cells += `<span style="top:${top}px;left:${left}px;transform:rotate(-28deg);">${text}</span>`;
-      }
-    }
-    return `<div class="sheet-watermark" aria-hidden="true">${cells}</div>`;
-  }
   function sheetFooterHtml(){
     return `<div class="sheet-footer-disclaimer">
       위 문서는 참고자료 및 대출상담용이며 대출승인시 변동이 있을 수 있으며 변동시 안내전화드리겠습니다.<br/>
@@ -2926,7 +2916,6 @@
     const jutaekLtvPct = houseTypeLTV(c.jutaekHouseType, c.jutaekDisposalCond);
     const jutaekLtvAmount = jutaekBase * (jutaekLtvPct/100);
     return `
-      ${sheetWatermarkHtml()}
       <div class="sheet-h1">주택담보대출 상담표</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}</div>
 
@@ -2977,7 +2966,6 @@
     const jeonseDeposit = (parseFloat(stripComma(c.jeonseDeposit))||0)*10000;
     const jeonseLtvAmount = jeonseDeposit * (jeonseLTV/100);
     return `
-      ${sheetWatermarkHtml()}
       <div class="sheet-h1">전세대출 상담표 (아파트)</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}</div>
 
@@ -3052,7 +3040,6 @@
     const total = items.reduce((sum,it)=> sum + (it.auto!==undefined ? it.auto : (parseFloat(stripComma(s[it.k]))||0)), 0);
     const ready = total - applied;
     return `
-      ${sheetWatermarkHtml()}
       <div class="sheet-h1">후취담보대출 상담표 (집단대출${c.jipdanSubType?' · '+c.jipdanSubType:''})</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}${c.jipdanArea?' · 전용'+escapeHtml(c.jipdanArea)+'㎡':''}${c.jipdanFloorLabel?' '+escapeHtml(c.jipdanFloorLabel):''}</div>
       ${(c.jipdanLawFirm||c.jipdanMoveInPeriod) ? `<div class="sheet-note" style="margin:-6px 12px 10px;">${c.jipdanLawFirm?'법무법인: '+escapeHtml(c.jipdanLawFirm):''}${(c.jipdanLawFirm&&c.jipdanMoveInPeriod)?' · ':''}${c.jipdanMoveInPeriod?'입주기간: '+escapeHtml(c.jipdanMoveInPeriod):''}</div>` : ''}
@@ -3147,14 +3134,6 @@
     `;
   }
 
-  function fitSheetWatermark(){
-    const page = document.getElementById('sheet-capture-target');
-    const wm = page && page.querySelector('.sheet-watermark');
-    if(!page || !wm) return;
-    wm.style.height = '0px';
-    const h = page.scrollHeight;
-    wm.style.height = h + 'px';
-  }
   function renderSheet(){
     const c = customers.find(x=>x.id===currentId);
     const tpl = c && SHEET_TEMPLATES[c.loanProduct];
@@ -3173,7 +3152,7 @@
         ` : ''}
       </div>
       <div class="sheet-draw-wrap" id="sheet-draw-wrap">
-        <div class="sheet-page" id="sheet-capture-target">${body}</div>
+        <div class="sheet-page sheet-watermark-bg" id="sheet-capture-target">${body}</div>
         <canvas class="sheet-draw-canvas ${sheetDrawOn?'on':''}" id="sheet-draw-canvas"></canvas>
       </div>
       <div class="disclaimer no-print">이 상담표는 참고용으로 자동 계산되며, 실제 금리·한도·비용은 대출실행일 기준 은행 심사 결과에 따라 달라질 수 있습니다.${sheetDrawOn?' 손글씨 메모는 저장되며, 다음에 다시 열어도 유지됩니다.':''}</div>
@@ -3199,9 +3178,6 @@
       el.onclick = ()=>{ sheetPenColor = el.getAttribute('data-pencolor'); sheetPenMode = 'pen'; renderSheet(); };
     });
     initSheetDrawing(c);
-    fitSheetWatermark();
-    window.removeEventListener('beforeprint', fitSheetWatermark);
-    window.addEventListener('beforeprint', fitSheetWatermark);
     document.querySelectorAll('[data-select-method]').forEach(el=>{
       el.addEventListener('click', ()=>{
         c.newLoan.method = el.getAttribute('data-select-method');
