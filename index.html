@@ -325,7 +325,8 @@
     .no-print{display:none !important;}
     .sheet-page{max-width:100%;padding:0;}
     body{background:#fff;}
-    .sheet-draw-print-only{display:block;}
+    .sheet-draw-print-only{display:block;position:absolute;top:0;left:0;pointer-events:none;}
+    .sheet-draw-print-only img{width:100%;height:100%;display:block;}
   }
 
   /* ---------- Tablet / larger screens (e.g. Galaxy Tab S9) ---------- */
@@ -360,6 +361,7 @@
   let branchCustomMode = false;
   let expandedMemoId = null;
   let detailReturnView = 'list';
+  let __sheetBeforePrintHandler = null;
   let query = '';
   let stateReady = false;
   let apartmentSites = [];
@@ -3154,7 +3156,7 @@
         ` : ''}
       </div>
       <div class="sheet-draw-wrap" id="sheet-draw-wrap">
-        <div class="sheet-page sheet-watermark-bg" id="sheet-capture-target">${body}<canvas class="sheet-draw-canvas no-print ${sheetDrawOn?'on':''}" id="sheet-draw-canvas"></canvas>${c.sheetDrawing?`<div class="sheet-draw-print-only"><img src="${c.sheetDrawing}" style="width:100%;height:auto;display:block;" alt="손글씨 메모"/></div>`:''}</div>
+        <div class="sheet-page sheet-watermark-bg" id="sheet-capture-target">${body}<canvas class="sheet-draw-canvas no-print ${sheetDrawOn?'on':''}" id="sheet-draw-canvas"></canvas>${c.sheetDrawing?`<div class="sheet-draw-print-only" id="sheet-draw-print-only"><img src="${c.sheetDrawing}" alt="손글씨 메모"/></div>`:''}</div>
       </div>
       <div class="disclaimer no-print">이 상담표는 참고용으로 자동 계산되며, 실제 금리·한도·비용은 대출실행일 기준 은행 심사 결과에 따라 달라질 수 있습니다.${sheetDrawOn?' 손글씨 메모는 저장되며, 다음에 다시 열어도 유지됩니다.':''}</div>
       <div style="height:76px;" class="no-print"></div>
@@ -3179,6 +3181,9 @@
       el.onclick = ()=>{ sheetPenColor = el.getAttribute('data-pencolor'); sheetPenMode = 'pen'; renderSheet(); };
     });
     initSheetDrawing(c);
+    window.removeEventListener('beforeprint', __sheetBeforePrintHandler);
+    __sheetBeforePrintHandler = ()=> initSheetDrawing(c);
+    window.addEventListener('beforeprint', __sheetBeforePrintHandler);
     document.querySelectorAll('[data-select-method]').forEach(el=>{
       el.addEventListener('click', ()=>{
         c.newLoan.method = el.getAttribute('data-select-method');
@@ -3213,6 +3218,8 @@
     const dpr = window.devicePixelRatio || 1;
     canvas.style.width = cssW+'px';
     canvas.style.height = cssH+'px';
+    const printImgWrap = document.getElementById('sheet-draw-print-only');
+    if(printImgWrap){ printImgWrap.style.width = cssW+'px'; printImgWrap.style.height = cssH+'px'; }
     canvas.width = Math.max(1, Math.round(cssW*dpr));
     canvas.height = Math.max(1, Math.round(cssH*dpr));
     const ctx = canvas.getContext('2d');
