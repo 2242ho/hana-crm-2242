@@ -268,7 +268,11 @@
   textarea{resize:vertical;min-height:54px;}
 
   /* 상담표 sheet view */
-  .sheet-page{background:#fff;color:#111;font-family:var(--sans);max-width:820px;margin:0 auto;padding:4px 2px 40px;}
+  .sheet-page{background:#fff;color:#111;font-family:var(--sans);max-width:820px;margin:0 auto;padding:4px 2px 40px;position:relative;}
+  .sheet-page-break{page-break-before:always;break-before:page;height:0;}
+  .sheet-watermark{position:absolute;top:0;left:0;width:100%;height:9000px;z-index:-1;pointer-events:none;overflow:hidden;}
+  .sheet-watermark span{position:absolute;white-space:nowrap;font-size:13px;font-weight:700;color:rgba(17,24,39,0.08);letter-spacing:1px;}
+  .sheet-footer-disclaimer{margin:24px 12px 0;padding:10px 12px;border-top:1px solid #D8DCE6;font-size:10.5px;color:#555;line-height:1.6;text-align:center;}
   .sheet-draw-wrap{position:relative;max-width:820px;margin:0 auto;}
   .sheet-draw-wrap .sheet-page{margin:0;}
   .sheet-draw-canvas{position:absolute;top:0;left:0;width:100%;height:100%;touch-action:none;pointer-events:none;}
@@ -2873,6 +2877,25 @@
       </div>
     `;
   }
+  function sheetWatermarkHtml(){
+    const text = '하나은행대출상담사 송명호';
+    const rows = 100, cols = 3;
+    let cells = '';
+    for(let r=0;r<rows;r++){
+      for(let c2=0;c2<cols;c2++){
+        const top = r*90;
+        const left = (c2*260) + (r%2===0?0:130);
+        cells += `<span style="top:${top}px;left:${left}px;transform:rotate(-28deg);">${text}</span>`;
+      }
+    }
+    return `<div class="sheet-watermark" aria-hidden="true">${cells}</div>`;
+  }
+  function sheetFooterHtml(){
+    return `<div class="sheet-footer-disclaimer">
+      위 문서는 참고자료 및 대출상담용이며 대출승인시 변동이 있을 수 있으며 변동시 안내전화드리겠습니다.<br/>
+      <b>하나은행 대출상담사 송명호 010-3615-2242</b>
+    </div>`;
+  }
   function sheetMonthlyBlock(amountManwon, ratePct, months, includePrincipal, selectedMethod){
     const nb = newLoanFirstMonth({amount:amountManwon, rate:ratePct, months:months});
     if(!nb) return `<div class="sheet-note">대출금액 · 금리 · 대출기간을 입력하면 월납입액이 계산돼요</div>`;
@@ -2903,6 +2926,7 @@
     const jutaekLtvPct = houseTypeLTV(c.jutaekHouseType, c.jutaekDisposalCond);
     const jutaekLtvAmount = jutaekBase * (jutaekLtvPct/100);
     return `
+      ${sheetWatermarkHtml()}
       <div class="sheet-h1">주택담보대출 상담표</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}</div>
 
@@ -2939,7 +2963,9 @@
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months, true, c.newLoan.method)}
       </div>
 
+      <div class="sheet-page-break"></div>
       <div class="sheet-note" style="margin:14px 12px 0;">본인은 은행으로부터 충분한 설명을 듣고, 본인의 의사에 따라 주택보유 여부를 조회하지 않는 대신 강화된 비율(LTV ${c.jutaekHouseType ? jutaekLtvPct+'%' : '__'})를 적용받기로 하였음을 확인합니다.</div>
+      ${sheetFooterHtml()}
     `;
   }
 
@@ -2951,6 +2977,7 @@
     const jeonseDeposit = (parseFloat(stripComma(c.jeonseDeposit))||0)*10000;
     const jeonseLtvAmount = jeonseDeposit * (jeonseLTV/100);
     return `
+      ${sheetWatermarkHtml()}
       <div class="sheet-h1">전세대출 상담표 (아파트)</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}</div>
 
@@ -2994,10 +3021,12 @@
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months||24, false)}
       </div>
 
+      <div class="sheet-page-break"></div>
       <div class="sheet-bar">7. 잔금당일 전입조건</div>
       <div class="sheet-box">
         <div class="sheet-note">전입신고 후 전입등본 및 전입세대열람표 팩스 또는 사진문자전송 필수<br/>팩스번호 0504-363-6864</div>
       </div>
+      ${sheetFooterHtml()}
     `;
   }
 
@@ -3023,6 +3052,7 @@
     const total = items.reduce((sum,it)=> sum + (it.auto!==undefined ? it.auto : (parseFloat(stripComma(s[it.k]))||0)), 0);
     const ready = total - applied;
     return `
+      ${sheetWatermarkHtml()}
       <div class="sheet-h1">후취담보대출 상담표 (집단대출${c.jipdanSubType?' · '+c.jipdanSubType:''})</div>
       <div class="sheet-h2">${escapeHtml(c.name)||'고객'} 고객님 ${c.consultDate?'· '+fmtDT(c.consultDate):''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}${c.jipdanArea?' · 전용'+escapeHtml(c.jipdanArea)+'㎡':''}${c.jipdanFloorLabel?' '+escapeHtml(c.jipdanFloorLabel):''}</div>
       ${(c.jipdanLawFirm||c.jipdanMoveInPeriod) ? `<div class="sheet-note" style="margin:-6px 12px 10px;">${c.jipdanLawFirm?'법무법인: '+escapeHtml(c.jipdanLawFirm):''}${(c.jipdanLawFirm&&c.jipdanMoveInPeriod)?' · ':''}${c.jipdanMoveInPeriod?'입주기간: '+escapeHtml(c.jipdanMoveInPeriod):''}</div>` : ''}
@@ -3086,6 +3116,7 @@
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months, true, c.newLoan.method)}
       </div>
 
+      <div class="sheet-page-break"></div>
       <div class="sheet-bar">대출 진행 절차</div>
       <div class="sheet-box">
         <div class="sheet-note">
@@ -3112,9 +3143,18 @@
           ◇ 등기비용은 협약(지정)법무사가 잔금정산 후 60일 이내로 연락 예정
         </div>
       </div>
+      ${sheetFooterHtml()}
     `;
   }
 
+  function fitSheetWatermark(){
+    const page = document.getElementById('sheet-capture-target');
+    const wm = page && page.querySelector('.sheet-watermark');
+    if(!page || !wm) return;
+    wm.style.height = '0px';
+    const h = page.scrollHeight;
+    wm.style.height = h + 'px';
+  }
   function renderSheet(){
     const c = customers.find(x=>x.id===currentId);
     const tpl = c && SHEET_TEMPLATES[c.loanProduct];
@@ -3159,6 +3199,9 @@
       el.onclick = ()=>{ sheetPenColor = el.getAttribute('data-pencolor'); sheetPenMode = 'pen'; renderSheet(); };
     });
     initSheetDrawing(c);
+    fitSheetWatermark();
+    window.removeEventListener('beforeprint', fitSheetWatermark);
+    window.addEventListener('beforeprint', fitSheetWatermark);
     document.querySelectorAll('[data-select-method]').forEach(el=>{
       el.addEventListener('click', ()=>{
         c.newLoan.method = el.getAttribute('data-select-method');
