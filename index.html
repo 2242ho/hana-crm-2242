@@ -365,7 +365,7 @@
   let stateReady = false;
   let apartmentSites = [];
   let siteEditId = null;
-  let dashFilter = { period:'all', product:[], status:[], from:'', to:'' };
+  let dashFilter = { period:'all', product:[], status:[], from:'', to:'', day:'', month:'' };
   let bulkSmsSelected = [];      // array of customer ids, in selection order (max 100)
   let bulkSmsQuery = '';
   let bulkSmsMessage = '';
@@ -1853,6 +1853,12 @@
       if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
       if(dashFilter.period==='thisMonth' && monthKey(c.balanceDate)!==thisMonthKey) return false;
       if(dashFilter.period==='nextMonth' && monthKey(c.balanceDate)!==nextMonthKey) return false;
+      if(dashFilter.period==='month'){
+        if(dashFilter.month && monthKey(c.balanceDate)!==dashFilter.month) return false;
+      }
+      if(dashFilter.period==='day'){
+        if(dashFilter.day && c.balanceDate!==dashFilter.day) return false;
+      }
       if(dashFilter.period==='custom'){
         if(dashFilter.from && c.balanceDate < dashFilter.from) return false;
         if(dashFilter.to && c.balanceDate > dashFilter.to) return false;
@@ -1889,7 +1895,9 @@
                 <option value="all" ${dashFilter.period==='all'?'selected':''}>전체</option>
                 <option value="thisMonth" ${dashFilter.period==='thisMonth'?'selected':''}>이번달</option>
                 <option value="nextMonth" ${dashFilter.period==='nextMonth'?'selected':''}>다음달</option>
-                <option value="custom" ${dashFilter.period==='custom'?'selected':''}>직접선택</option>
+                <option value="month" ${dashFilter.period==='month'?'selected':''}>월별 선택</option>
+                <option value="day" ${dashFilter.period==='day'?'selected':''}>특정일 선택</option>
+                <option value="custom" ${dashFilter.period==='custom'?'selected':''}>기간(범위) 선택</option>
               </select>
             </div>
           </div>
@@ -1915,6 +1923,16 @@
           ${dashFilter.period==='custom' ? `
           <div class="field-row">
             <div class="field"><label>종료일</label><input type="date" id="f-dash-to" value="${escapeAttr(dashFilter.to)}"/></div>
+            <div class="field"></div>
+          </div>` : ''}
+          ${dashFilter.period==='month' ? `
+          <div class="field-row">
+            <div class="field"><label>월 선택</label><input type="month" id="f-dash-month" value="${escapeAttr(dashFilter.month)}"/></div>
+            <div class="field"></div>
+          </div>` : ''}
+          ${dashFilter.period==='day' ? `
+          <div class="field-row">
+            <div class="field"><label>날짜 선택</label><input type="date" id="f-dash-day" value="${escapeAttr(dashFilter.day)}"/></div>
             <div class="field"></div>
           </div>` : ''}
         </div>
@@ -1997,6 +2015,10 @@
     if(fromEl) fromEl.onchange = (e)=>{ dashFilter.from = e.target.value; render(); };
     const toEl = document.getElementById('f-dash-to');
     if(toEl) toEl.onchange = (e)=>{ dashFilter.to = e.target.value; render(); };
+    const monthEl = document.getElementById('f-dash-month');
+    if(monthEl) monthEl.onchange = (e)=>{ dashFilter.month = e.target.value; render(); };
+    const dayEl = document.getElementById('f-dash-day');
+    if(dayEl) dayEl.onchange = (e)=>{ dashFilter.day = e.target.value; render(); };
     document.querySelectorAll('#app-root .card[data-id]').forEach(el=>{
       el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; detailReturnView = 'balanceDash'; render(); };
     });
