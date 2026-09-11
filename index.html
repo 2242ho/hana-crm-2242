@@ -3265,6 +3265,16 @@
       drawing = false;
       c.sheetDrawing = canvas.toDataURL('image/png');
       saveCustomers(false);
+      let printWrap = document.getElementById('sheet-draw-print-only');
+      if(!printWrap){
+        printWrap = document.createElement('div');
+        printWrap.id = 'sheet-draw-print-only';
+        printWrap.className = 'sheet-draw-print-only';
+        printWrap.style.width = cssW+'px';
+        printWrap.style.height = cssH+'px';
+        page.appendChild(printWrap);
+      }
+      printWrap.style.backgroundImage = `url('${c.sheetDrawing}')`;
     }
     canvas.addEventListener('pointerdown', start);
     canvas.addEventListener('pointermove', move);
