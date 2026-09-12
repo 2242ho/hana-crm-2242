@@ -507,7 +507,7 @@
     return {
       id: uid(), name:'', phone:'', phone2:'', phone3:'', status:'상담중', receivingBranch:'', updatedAt: Date.now(),
       loanProduct:'', referralSource:'', realtorName:'', lawyerReferral:false, lawyerName:'', lawyerWorkType:'', apartmentName:'', unitNumber:'', jipdanSubType:'', jeonseSubType:'',
-      jutaekHouseType:'', jutaekDisposalCond:false, jutaekDealPrice:'', jutaekKbPrice:'',
+      jutaekHouseType:'', jutaekDisposalCond:false, jutaekDealPrice:'', jutaekKbPrice:'', jutaekLtvBasis:'',
       jipdanHouseType:'', jipdanDisposalCond:false, jipdanAppraisal:'',
       jipdanSiteId:'', jipdanArea:'', jipdanFloorLabel:'', jipdanLawFirm:'', jipdanMoveInPeriod:'',
       jeonseHouseType:'', jeonseKbPrice:'', jeonseDeposit:'',
@@ -1115,14 +1115,59 @@
     if(houseType==='생애최초') return 80;
     if(houseType==='무주택') return 70;
     if(houseType==='1주택보유') return disposalCond ? 70 : 60;
+    if(houseType==='2주택이상보유') return 60;
     return 0;
+  }
+  const MCI_DEDUCTION_MANWON = 2500;
+  function mciCalcHtml(availManwon, desiredManwon){
+    if(!availManwon) return '';
+    const nonMciMax = Math.max(0, availManwon - MCI_DEDUCTION_MANWON);
+    let html = `방공제(${fmtManwon(MCI_DEDUCTION_MANWON)}만원) 차감 후 대출가능액: <b>${fmtManwon(nonMciMax)}만원</b>`;
+    if(desiredManwon>0){
+      const cappedDesired = Math.min(desiredManwon, availManwon);
+      if(cappedDesired > nonMciMax){
+        const mci = Math.min(cappedDesired - nonMciMax, MCI_DEDUCTION_MANWON);
+        html += `<br/>희망금액 ${fmtManwon(desiredManwon)}만원 대출 시 MCI 가입금액: <b>${fmtManwon(mci)}만원</b> (${fmtManwon(nonMciMax)}만원 + MCI ${fmtManwon(mci)}만원 = ${fmtManwon(nonMciMax+mci)}만원)`;
+        if(desiredManwon > availManwon){
+          html += `<br/><span style="color:var(--red);">⚠ 희망금액이 LTV 한도(${fmtManwon(availManwon)}만원)를 초과해요</span>`;
+        }
+      } else {
+        html += `<br/>희망금액 ${fmtManwon(desiredManwon)}만원은 MCI 없이 가능해요`;
+      }
+    }
+    return html;
+  }
+  function jutaekLtvAvailText(c){
+    const basis = c.jutaekLtvBasis || 'kb';
+    const kb = parseFloat(stripComma(c.jutaekKbPrice))||0;
+    const deal = parseFloat(stripComma(c.jutaekDealPrice))||0;
+    const baseVal = basis==='deal' ? deal : kb;
+    if(!baseVal || !c.jutaekHouseType) return '주택유형과 KB시세/매매가를 입력하면 계산돼요';
+    const ltv = houseTypeLTV(c.jutaekHouseType, c.jutaekDisposalCond);
+    const avail = Math.round(baseVal*ltv/100);
+    return `${fmtManwon(baseVal)}만원 × LTV ${ltv}% = <b>${fmtManwon(avail)}만원</b>`;
+  }
+  function jutaekAvailManwon(c){
+    const basis = c.jutaekLtvBasis || 'kb';
+    const kb = parseFloat(stripComma(c.jutaekKbPrice))||0;
+    const deal = parseFloat(stripComma(c.jutaekDealPrice))||0;
+    const baseVal = basis==='deal' ? deal : kb;
+    if(!baseVal || !c.jutaekHouseType) return 0;
+    const ltv = houseTypeLTV(c.jutaekHouseType, c.jutaekDisposalCond);
+    return Math.round(baseVal*ltv/100);
+  }
+  function jipdanAvailManwon(c){
+    const appraisal = parseFloat(stripComma(c.jipdanAppraisal))||0;
+    if(!appraisal || !c.jipdanHouseType) return 0;
+    const ltv = houseTypeLTV(c.jipdanHouseType, c.jipdanDisposalCond);
+    return Math.round(appraisal*ltv/100);
   }
   function jipdanLtvResultHtml(c){
     const appraisal = parseFloat(stripComma(c.jipdanAppraisal))||0;
     if(!appraisal || !c.jipdanHouseType) return '';
     const ltv = houseTypeLTV(c.jipdanHouseType, c.jipdanDisposalCond);
     const avail = Math.round(appraisal*ltv/100);
-    const typeLabel = c.jipdanHouseType + (c.jipdanHouseType==='1주택보유' && c.jipdanDisposalCond ? '(처분조건)' : '');
+    const typeLabel = c.jipdanHouseType + (c.jipdanHouseType==='1주택보유' && c.jipdanDisposalCond ? '(처분조건)' : '') + (c.jipdanHouseType==='2주택이상보유' && c.jipdanDisposalCond ? '(기존1주택매도)' : '');
     return `<div class="sheet-result">감정가 ${fmtManwon(appraisal)}만원 × ${typeLabel} LTV ${ltv}% = 대출가능금액 약 ${fmtManwon(avail)}만원</div>`;
   }
   function monthsToYearsLabel(months){
@@ -1871,7 +1916,7 @@
     const nd = new Date(now.getFullYear(), now.getMonth()+1, 1);
     const nextMonthKey = `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}`;
     return customers.filter(c=>{
-      if(!c.balanceDate) return false;
+      if(dashFilter.period!=='all' && !c.balanceDate) return false;
       if(dashFilter.product.length>0 && !dashFilter.product.includes(dashProductToken(c))) return false;
       if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
       if(dashFilter.period==='thisMonth' && monthKey(c.balanceDate)!==thisMonthKey) return false;
@@ -2303,9 +2348,15 @@
         ${['일반주택담보대출','집단대출','전세대출'].includes(c.loanProduct) ? `
         <div class="section">
           <div class="section-title"><span class="dot"></span>담보대출 기본정보</div>
+          ${c.loanProduct!=='일반주택담보대출' ? `
           <div class="field-row">
             <div class="field num"><label>대출희망금액 (만원)</label><input type="text" inputmode="numeric" class="money" id="f-desiredAmount" value="${moneyDisplay(c.desiredLoanAmount)}" placeholder="30000"/></div>
           </div>
+          ${(c.loanProduct==='집단대출' && c.jipdanSubType==='등기전') ? (()=>{
+            const mci = mciCalcHtml(jipdanAvailManwon(c), parseFloat(stripComma(c.desiredLoanAmount))||0);
+            return mci ? `<div class="sheet-note" style="margin:-8px 0 10px;">${mci}</div>` : '';
+          })() : ''}
+          ` : ''}
           ${c.loanProduct==='전세대출' ? `
           <div class="field-row">
             <div class="field">
@@ -2328,15 +2379,16 @@
               <select id="${c.loanProduct==='집단대출'?'f-jipdanHouseType':'f-jutaekHouseType'}">
                 <option value="" ${!(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)?'selected':''}>선택</option>
                 <option ${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='1주택보유'?'selected':''}>1주택보유</option>
+                <option ${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='2주택이상보유'?'selected':''}>2주택이상보유</option>
                 <option ${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='무주택'?'selected':''}>무주택</option>
                 <option ${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='생애최초'?'selected':''}>생애최초</option>
               </select>
             </div>
           </div>
-          ${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='1주택보유' ? `
+          ${['1주택보유','2주택이상보유'].includes(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType) ? `
           <div class="checkbox-row" style="margin-bottom:8px;">
             <input type="checkbox" id="${c.loanProduct==='집단대출'?'f-jipdanDisposalCond':'f-jutaekDisposalCond'}" ${(c.loanProduct==='집단대출'?c.jipdanDisposalCond:c.jutaekDisposalCond)?'checked':''}/>
-            <label>잔금당일 처분조건 (기존주택 처분 서약)</label>
+            <label>${(c.loanProduct==='집단대출'?c.jipdanHouseType:c.jutaekHouseType)==='2주택이상보유' ? '기존1주택매도' : '잔금당일 처분조건 (기존주택 처분 서약)'}</label>
           </div>` : ''}
           ${c.loanProduct==='집단대출' ? `
           <div class="field-row">
@@ -2348,6 +2400,21 @@
             <div class="field num"><label>매매가 (만원)</label><input type="text" inputmode="numeric" class="money" id="f-jutaekDealPrice" value="${moneyDisplay(c.jutaekDealPrice)}" placeholder="50000"/></div>
             <div class="field num"><label>KB시세 (만원)</label><input type="text" inputmode="numeric" class="money" id="f-jutaekKbPrice" value="${moneyDisplay(c.jutaekKbPrice)}" placeholder="50000"/></div>
           </div>
+          <div class="field-row">
+            <div class="field num"><label>대출희망금액 (만원)</label><input type="text" inputmode="numeric" class="money" id="f-desiredAmount" value="${moneyDisplay(c.desiredLoanAmount)}" placeholder="30000"/></div>
+            <div class="field">
+              <label>대출가능금액</label>
+              <select id="f-jutaekLtvBasis" style="margin-bottom:6px;">
+                <option value="kb" ${(c.jutaekLtvBasis||'kb')==='kb'?'selected':''}>KB시세 기준</option>
+                <option value="deal" ${c.jutaekLtvBasis==='deal'?'selected':''}>매매가 기준</option>
+              </select>
+              <div style="font-size:12.5px;line-height:1.5;color:var(--ink);padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;">${jutaekLtvAvailText(c)}</div>
+            </div>
+          </div>
+          ${(()=>{
+            const mci = mciCalcHtml(jutaekAvailManwon(c), parseFloat(stripComma(c.desiredLoanAmount))||0);
+            return mci ? `<div class="sheet-note" style="margin:-8px 0 10px;">${mci}</div>` : '';
+          })()}
           `}
           `}
         </div>
@@ -2621,6 +2688,7 @@
         c.jutaekDisposalCond = !!(document.getElementById('f-jutaekDisposalCond') && document.getElementById('f-jutaekDisposalCond').checked);
         c.jutaekDealPrice = stripComma(val('f-jutaekDealPrice'));
         c.jutaekKbPrice = stripComma(val('f-jutaekKbPrice'));
+        c.jutaekLtvBasis = val('f-jutaekLtvBasis');
       }
       if(c.loanProduct==='집단대출'){
         c.jipdanHouseType = val('f-jipdanHouseType');
