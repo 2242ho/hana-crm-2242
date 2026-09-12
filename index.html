@@ -575,6 +575,15 @@
     {key:'child2', label:'미성년자녀 2명', pct:0.1},
     {key:'child3', label:'미성년자녀 3명 이상', pct:0.2},
   ];
+  const EXTRA_PREFER_ITEMS = [
+    {key:'econtract', label:'전자계약시', pct:0.2},
+    {key:'child2', label:'미성년자녀 2명 (전용면적 85㎡ 이하)', pct:0.1},
+    {key:'child3', label:'미성년자녀 3명 이상 (면적제한없음)', pct:0.2},
+  ];
+  function extraPreferPct(sheet){
+    const item = EXTRA_PREFER_ITEMS.find(x=>x.key===sheet.extraPref);
+    return item ? item.pct : 0;
+  }
   function preferTotal(sheet, items){
     items = items || PREFER_ITEMS;
     return items.reduce((s,p)=> s + (sheet[p.key] ? p.pct : 0), 0);
@@ -2959,23 +2968,45 @@
   }
 
   // ---------- 상담표 (sheet) helpers ----------
-  function sheetFinalRate(sheet, baseKey, addKey, hasPrefer, items){
+  function sheetFinalRate(sheet, baseKey, addKey, hasPrefer, items, hasExtraPrefer){
     const base = parseFloat(sheet[baseKey])||0;
     const add = parseFloat(sheet[addKey])||0;
     const prefer = hasPrefer ? preferTotal(sheet, items) : 0;
-    return base + add - prefer;
+    const extra = hasExtraPrefer ? extraPreferPct(sheet) : 0;
+    return base + add - prefer - extra;
+  }
+  function effectiveFinalRate(sheet, baseKey, addKey, hasPrefer, items, hasExtraPrefer){
+    const v = parseFloat(sheet.finalRate);
+    if(sheet.finalRate!==undefined && sheet.finalRate!=='' && !isNaN(v)) return v;
+    return sheetFinalRate(sheet, baseKey, addKey, hasPrefer, items, hasExtraPrefer);
   }
   function rateFormulaBlock(sheet, opts){
-    const final = sheetFinalRate(sheet, opts.baseKey, opts.addKey, opts.hasPrefer, opts.items);
     const prefer = opts.hasPrefer ? preferTotal(sheet, opts.items) : 0;
+    const extra = opts.hasExtraPrefer ? extraPreferPct(sheet) : 0;
+    if(opts.editableFinal){
+      const final = effectiveFinalRate(sheet, opts.baseKey, opts.addKey, opts.hasPrefer, opts.items, opts.hasExtraPrefer);
+      return `
+        <div class="sheet-formula">
+          <input type="number" step="0.001" data-skey="finalRate" value="${final.toFixed(3)}" placeholder="최종금리" style="font-weight:800;color:var(--navy-900);"/>
+          <span>=</span>
+          <input type="number" step="0.001" data-skey="${opts.baseKey}" value="${sheet[opts.baseKey]||''}" placeholder="기준금리"/>
+          <span>+</span>
+          <input type="number" step="0.001" data-skey="${opts.addKey}" value="${sheet[opts.addKey]||''}" placeholder="가산금리"/>
+          ${opts.hasPrefer?`<span>-</span><span style="font-family:var(--mono)">${prefer.toFixed(1)}%</span>`:''}
+          ${opts.hasExtraPrefer?`<span>-</span><span style="font-family:var(--mono)">${extra.toFixed(1)}%(추가우대)</span>`:''}
+        </div>
+      `;
+    }
+    const final = sheetFinalRate(sheet, opts.baseKey, opts.addKey, opts.hasPrefer, opts.items, opts.hasExtraPrefer);
     return `
       <div class="sheet-formula">
-        <input type="number" step="0.01" data-skey="${opts.baseKey}" value="${sheet[opts.baseKey]||''}" placeholder="기준금리"/>
+        <input type="number" step="0.001" data-skey="${opts.baseKey}" value="${sheet[opts.baseKey]||''}" placeholder="기준금리"/>
         <span>+</span>
-        <input type="number" step="0.01" data-skey="${opts.addKey}" value="${sheet[opts.addKey]||''}" placeholder="가산금리"/>
+        <input type="number" step="0.001" data-skey="${opts.addKey}" value="${sheet[opts.addKey]||''}" placeholder="가산금리"/>
         ${opts.hasPrefer?`<span>-</span><span style="font-family:var(--mono)">${prefer.toFixed(1)}%</span>`:''}
+        ${opts.hasExtraPrefer?`<span>-</span><span style="font-family:var(--mono)">${extra.toFixed(1)}%(추가우대)</span>`:''}
         <span>=</span>
-        <b style="color:var(--navy-900)">${final.toFixed(2)}%</b>
+        <b style="color:var(--navy-900)">${final.toFixed(3)}%</b>
       </div>
     `;
   }
@@ -2993,6 +3024,27 @@
           </div>
         `).join('')}
         <div class="sheet-result">우대금리 합계: ${total.toFixed(1)}%</div>
+      </div>
+    `;
+  }
+  function sheetExtraPreferBlock(sheet, title){
+    const total = extraPreferPct(sheet);
+    return `
+      <div class="sheet-bar">${title||'추가우대항목'} <span style="font-weight:500;font-size:11px;">(중복우대 안됨 · 1개만 선택)</span></div>
+      <div class="sheet-box">
+        <div class="sheet-check-row">
+          <input type="radio" name="sheet-extra-pref" data-skey="extraPref" value="" ${!sheet.extraPref?'checked':''}/>
+          <span>선택 안함</span>
+          <span class="pct"></span>
+        </div>
+        ${EXTRA_PREFER_ITEMS.map(p=>`
+          <div class="sheet-check-row">
+            <input type="radio" name="sheet-extra-pref" data-skey="extraPref" value="${p.key}" ${sheet.extraPref===p.key?'checked':''}/>
+            <span>${p.label}</span>
+            <span class="pct">${p.pct}%</span>
+          </div>
+        `).join('')}
+        <div class="sheet-result">추가우대금리: ${total.toFixed(1)}%</div>
       </div>
     `;
   }
@@ -3021,7 +3073,7 @@
 
   function sheetJutaek(c){
     const s = c.sheet;
-    const finalRate = sheetFinalRate(s,'baseRate','addRate',true);
+    const finalRate = effectiveFinalRate(s,'baseRate','addRate',true,null,true);
     const years = monthsToYearsLabel(c.newLoan.months);
     const applied = (parseFloat(stripComma(c.newLoan.amount))||0)*10000;
     const jutaekStampDuty = stampDutyByAmount(applied);
@@ -3041,11 +3093,13 @@
       </div>
 
       <div class="sheet-bar">2. 금리 <span style="font-weight:500;font-size:11px;">(최종금리는 대출실행 당일에 확정됨)</span></div>
-      <div class="sheet-box">${rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true})}</div>
+      <div class="sheet-box">${rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true,hasExtraPrefer:true,editableFinal:true})}</div>
 
       ${sheetPreferBlock(s,'3. 우대금리항목')}
 
-      <div class="sheet-bar">4. 중도상환수수료</div>
+      ${sheetExtraPreferBlock(s,'4. 추가우대항목')}
+
+      <div class="sheet-bar">5. 중도상환수수료</div>
       <div class="sheet-box">
         <div class="sheet-note">
           · 상환수수료 고정금리 시 0.65%~ (슬라이드방식), 변동금리 시 0.78%~ (슬라이드방식)<br/>
@@ -3054,7 +3108,7 @@
         </div>
       </div>
 
-      <div class="sheet-bar">5. 부대비용</div>
+      <div class="sheet-bar">6. 부대비용</div>
       <div class="sheet-box">
         <div class="sheet-fld" style="margin-bottom:8px;"><label>인지대</label><input value="${fmtWon(jutaekStampDuty)}원" disabled/></div>
         <div class="sheet-fld" style="margin-bottom:8px;"><label>채권매입비 (원)</label><input type="text" inputmode="numeric" class="money" data-unit="won" data-hint="approx" data-skey="bondFee" value="${moneyDisplay(s.bondFee)}" placeholder="100000"/><span class="money-kr" style="font-size:10.5px;color:var(--gold);font-family:var(--mono);">${s.bondFee?'약 '+fmtWon(parseFloat(stripComma(s.bondFee))||0)+'원':''}</span></div>
@@ -3062,9 +3116,9 @@
         <div class="sheet-result">합계 ${fmtWon(feeSum)}원</div>
       </div>
 
-      <div class="sheet-bar">6. 월납입액</div>
+      <div class="sheet-bar">7. 월납입액</div>
       <div class="sheet-box">
-        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원 · 대출기간 ${years}년(비거치) · 예상금리 ${finalRate.toFixed(2)}%</div>
+        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원 · 대출기간 ${years}년(비거치) · 예상금리 ${finalRate.toFixed(3)}%</div>
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months, true, c.newLoan.method)}
       </div>
 
@@ -3076,7 +3130,7 @@
 
   function sheetJeonse(c){
     const s = c.sheet;
-    const finalRate = sheetFinalRate(s,'baseRate','addRate',true);
+    const finalRate = effectiveFinalRate(s,'baseRate','addRate',true,null,true);
     const feeSum = (parseFloat(stripComma(s.deliveryFee))||0)+(parseFloat(stripComma(s.stampDuty))||0);
     const jeonseLTV = c.jeonseHouseType==='1주택' ? 60 : (c.jeonseHouseType==='무주택' ? 80 : 0);
     const jeonseDeposit = (parseFloat(stripComma(c.jeonseDeposit))||0)*10000;
@@ -3089,11 +3143,13 @@
       <div class="sheet-box"><div class="sheet-note">2년</div></div>
 
       <div class="sheet-bar">2. 금리 <span style="font-weight:500;font-size:11px;">(최종금리는 대출실행 당일에 확정됨)</span></div>
-      <div class="sheet-box">${rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true})}</div>
+      <div class="sheet-box">${rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true,hasExtraPrefer:true,editableFinal:true})}</div>
 
       ${sheetPreferBlock(s,'3. 우대금리항목')}
 
-      <div class="sheet-bar">4. 중도상환수수료</div>
+      ${sheetExtraPreferBlock(s,'4. 추가우대항목')}
+
+      <div class="sheet-bar">5. 중도상환수수료</div>
       <div class="sheet-box">
         <div class="sheet-note">
           · 상환수수료 0.59%~ 부과 (슬라이드방식)<br/>
@@ -3102,7 +3158,7 @@
         </div>
       </div>
 
-      <div class="sheet-bar">5. 부대비용</div>
+      <div class="sheet-bar">6. 부대비용</div>
       <div class="sheet-box">
         <div class="sheet-fld" style="margin-bottom:8px;"><label>송달료 (원)</label><input type="text" inputmode="numeric" class="money" data-unit="won" data-skey="deliveryFee" value="${moneyDisplay(s.deliveryFee)}" placeholder="10000"/><span class="money-kr" style="font-size:10.5px;color:var(--gold);font-family:var(--mono);">${s.deliveryFee?krWon(parseFloat(stripComma(s.deliveryFee))||0):''}</span></div>
         <div class="sheet-fld" style="margin-bottom:8px;"><label>인지대 (원)</label><input type="text" inputmode="numeric" class="money" data-unit="won" data-skey="stampDuty" value="${moneyDisplay(s.stampDuty)}" placeholder="40000"/><span class="money-kr" style="font-size:10.5px;color:var(--gold);font-family:var(--mono);">${s.stampDuty?krWon(parseFloat(stripComma(s.stampDuty))||0):''}</span></div>
@@ -3119,14 +3175,14 @@
         <div class="sheet-result">합계 ${fmtWon(feeSum)}원${(s.loanInsuranceApplies||s.depositInsuranceApplies)?' (보증보험료 별도, 승인 후 안내)':''}</div>
       </div>
 
-      <div class="sheet-bar">6. 월납입액</div>
+      <div class="sheet-bar">7. 월납입액</div>
       <div class="sheet-box">
-        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원 · 예정이자 ${finalRate.toFixed(2)}%</div>
+        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원 · 예정이자 ${finalRate.toFixed(3)}%</div>
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months||24, false)}
       </div>
 
       <div class="sheet-page-break"></div>
-      <div class="sheet-bar">7. 잔금당일 전입조건</div>
+      <div class="sheet-bar">8. 잔금당일 전입조건</div>
       <div class="sheet-box">
         <div class="sheet-note">전입신고 후 전입등본 및 전입세대열람표 팩스 또는 사진문자전송 필수<br/>팩스번호 0504-363-6864</div>
       </div>
@@ -3180,7 +3236,7 @@
       <div class="sheet-box">${isAkkime ? `
         <div class="sheet-fld" style="max-width:160px;">
           <label>금리 (%)</label>
-          <input type="number" step="0.01" data-skey="fixedRate" value="${s.fixedRate||''}" placeholder="금리"/>
+          <input type="number" step="0.001" data-skey="fixedRate" value="${s.fixedRate||''}" placeholder="금리"/>
         </div>
       ` : rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true,items:JIPDAN_PREFER_ITEMS})}</div>
 
@@ -3215,7 +3271,7 @@
 
       <div class="sheet-bar">${isAkkime?5:6}. 월납입액</div>
       <div class="sheet-box">
-        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원(${krWon(applied)}) · 대출기간(비거치) ${years}년 · 예정대출이자 ${finalRate.toFixed(2)}%</div>
+        <div class="sheet-note">대출금 ${fmtManwon(c.newLoan.amount)}만원(${krWon(applied)}) · 대출기간(비거치) ${years}년 · 예정대출이자 ${finalRate.toFixed(3)}%</div>
         ${sheetMonthlyBlock(c.newLoan.amount, finalRate, c.newLoan.months, true, c.newLoan.method)}
       </div>
 
@@ -3303,6 +3359,7 @@
         renderSheet();
       });
     });
+    const RATE_RECALC_KEYS = ['baseRate','addRate','extraPref', ...PREFER_ITEMS.map(p=>p.key)];
     document.querySelectorAll('[data-skey]').forEach(el=>{
       el.addEventListener('change', ()=>{
         preserveFocusRerender(()=>{
@@ -3312,6 +3369,16 @@
             const site = apartmentSites.find(x=>x.id===c.jipdanSiteId);
             const opt = site && site.rateOptions.find(r=>siteRateSheetType(r.label)===c.sheet.rateType);
             if(opt){ c.sheet.addRate = opt.addRate; doToast('아파트현장 가산금리를 자동 반영했어요'); }
+          }
+          const isJutaekOrJeonse = (c.loanProduct==='일반주택담보대출' || c.loanProduct==='전세대출');
+          if(k==='finalRate' && isJutaekOrJeonse){
+            const base = parseFloat(c.sheet.baseRate)||0;
+            const final = parseFloat(c.sheet.finalRate)||0;
+            const prefer = preferTotal(c.sheet);
+            const extra = extraPreferPct(c.sheet);
+            c.sheet.addRate = (final - base + prefer + extra).toFixed(3);
+          } else if(RATE_RECALC_KEYS.includes(k) && isJutaekOrJeonse){
+            c.sheet.finalRate = sheetFinalRate(c.sheet,'baseRate','addRate',true,null,true).toFixed(3);
           }
           saveCustomers(false);
           renderSheet();
@@ -3747,11 +3814,11 @@
       lines.push('');
       if(isAkkime){
         lines.push('▶ 금리 (최종금리는 대출실행 당일에 확정됨)');
-        lines.push(`금리: ${finalRate.toFixed(2)}%`);
+        lines.push(`금리: ${finalRate.toFixed(3)}%`);
         lines.push('');
       } else {
         lines.push('▶ 금리 (최종금리는 대출실행 당일에 확정됨)');
-        lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s,JIPDAN_PREFER_ITEMS).toFixed(1)}% = 최종 ${finalRate.toFixed(2)}%`);
+        lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s,JIPDAN_PREFER_ITEMS).toFixed(1)}% = 최종 ${finalRate.toFixed(3)}%`);
         lines.push('');
         lines.push('▶ 우대금리항목 (최대 0.3%)');
         lines.push(JIPDAN_PREFER_ITEMS.map(p=>`${s[p.key]?'☑':'☐'} ${p.label} (${p.pct}%)`).join('\n'));
@@ -3800,7 +3867,7 @@
       lines.push(`- 잔금대출신청금: ${fmtWon(applied)}원`);
       lines.push(`= 준비금액(대출실행 전까지 입금): ${fmtWon(jTotal-applied)}원`);
     } else if(c.loanProduct==='일반주택담보대출'){
-      const finalRate = sheetFinalRate(s,'baseRate','addRate',true);
+      const finalRate = effectiveFinalRate(s,'baseRate','addRate',true,null,true);
       const jutaekDeal = (parseFloat(stripComma(c.jutaekDealPrice))||0)*10000;
       const jutaekKb = (parseFloat(stripComma(c.jutaekKbPrice))||0)*10000;
       const base = (jutaekDeal>0 && jutaekKb>0) ? Math.min(jutaekDeal,jutaekKb) : (jutaekDeal||jutaekKb||0);
@@ -3820,11 +3887,15 @@
       lines.push(`실제 대출기간: ${years}년`);
       lines.push('');
       lines.push('▶ 금리 (최종금리는 대출실행 당일에 확정됨)');
-      lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s).toFixed(1)}% = 최종 ${finalRate.toFixed(2)}%`);
+      lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s).toFixed(1)}% - 추가우대금리 ${extraPreferPct(s).toFixed(1)}% = 최종 ${finalRate.toFixed(3)}%`);
       lines.push('');
       lines.push('▶ 우대금리항목 (최대 0.9%)');
       lines.push(preferOn.map(p=>`${s[p.key]?'☑':'☐'} ${p.label} (${p.pct}%)`).join('\n'));
       lines.push(`우대금리 합계: ${preferTotal(s).toFixed(1)}%`);
+      lines.push('');
+      lines.push('▶ 추가우대항목 (중복우대 안됨)');
+      lines.push(EXTRA_PREFER_ITEMS.map(p=>`${s.extraPref===p.key?'●':'○'} ${p.label} (${p.pct}%)`).join('\n'));
+      lines.push(`추가우대금리: ${extraPreferPct(s).toFixed(1)}%`);
       lines.push('');
       lines.push('▶ 중도상환수수료');
       lines.push('· 고정금리 시 0.65%~, 변동금리 시 0.78%~ (슬라이드방식)');
@@ -3843,7 +3914,7 @@
         lines.push(`원금균등: ${fmtWon(nb.principalTotal)}원 (원금 ${fmtWon(nb.principalMonthly)} + 이자 ${fmtWon(nb.principalInterest)})`);
       } else lines.push('대출금액·금리·기간 입력 시 계산돼요');
     } else if(c.loanProduct==='전세대출'){
-      const finalRate = sheetFinalRate(s,'baseRate','addRate',true);
+      const finalRate = effectiveFinalRate(s,'baseRate','addRate',true,null,true);
       const ltvPct = c.jeonseHouseType==='1주택' ? 60 : (c.jeonseHouseType==='무주택' ? 80 : 0);
       const deposit = (parseFloat(stripComma(c.jeonseDeposit))||0)*10000;
       const ltvAmount = deposit*(ltvPct/100);
@@ -3856,11 +3927,15 @@
       lines.push('대출기간: 2년');
       lines.push('');
       lines.push('▶ 금리 (최종금리는 대출실행 당일에 확정됨)');
-      lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s).toFixed(1)}% = 최종 ${finalRate.toFixed(2)}%`);
+      lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s).toFixed(1)}% - 추가우대금리 ${extraPreferPct(s).toFixed(1)}% = 최종 ${finalRate.toFixed(3)}%`);
       lines.push('');
       lines.push('▶ 우대금리항목 (최대 0.9%)');
       lines.push(PREFER_ITEMS.map(p=>`${s[p.key]?'☑':'☐'} ${p.label} (${p.pct}%)`).join('\n'));
       lines.push(`우대금리 합계: ${preferTotal(s).toFixed(1)}%`);
+      lines.push('');
+      lines.push('▶ 추가우대항목 (중복우대 안됨)');
+      lines.push(EXTRA_PREFER_ITEMS.map(p=>`${s.extraPref===p.key?'●':'○'} ${p.label} (${p.pct}%)`).join('\n'));
+      lines.push(`추가우대금리: ${extraPreferPct(s).toFixed(1)}%`);
       lines.push('');
       lines.push('▶ 중도상환수수료');
       lines.push('· 상환수수료 0.59%~ 부과 (슬라이드방식)');
