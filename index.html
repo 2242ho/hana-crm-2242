@@ -365,7 +365,28 @@
   let stateReady = false;
   let apartmentSites = [];
   let siteEditId = null;
-  let dashFilter = { period:'all', product:[], status:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
+  let dashFilter = { period:'all', product:[], status:[], branch:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
+  function branchNorm(s){ return (s||'').replace(/지점$/,'').trim(); }
+  function branchMatches(customerBranch, normKey){
+    if(!customerBranch || !normKey) return false;
+    return branchNorm(customerBranch)===normKey;
+  }
+  function branchOptionsFromCustomers(){
+    const groups = {};
+    customers.forEach(c=>{
+      const raw = (c.receivingBranch||'').trim();
+      if(!raw) return;
+      const norm = branchNorm(raw);
+      if(!norm) return;
+      if(!groups[norm]) groups[norm] = {};
+      groups[norm][raw] = (groups[norm][raw]||0)+1;
+    });
+    return Object.keys(groups).map(norm=>{
+      const variants = groups[norm];
+      const label = Object.keys(variants).sort((a,b)=>variants[b]-variants[a])[0];
+      return { norm, label };
+    }).sort((a,b)=>a.label.localeCompare(b.label,'ko'));
+  }
   function mondayWeekRange(dateStr){
     if(!dateStr) return null;
     const d = new Date(dateStr+'T00:00:00');
@@ -1981,6 +2002,7 @@
     return customers.filter(c=>{
       if(dashFilter.product.length>0 && !dashFilter.product.includes(dashProductToken(c))) return false;
       if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
+      if(dashFilter.branch.length>0 && !dashFilter.branch.some(kw=>branchMatches(c.receivingBranch, kw))) return false;
       if(dashFilter.period==='all') return true;
       const balHit = dashFilter.showBalance && dateMatches(c.balanceDate);
       const consultHit = dashFilter.showConsult && c.consultDate && dateMatches(c.consultDate.slice(0,10));
@@ -2046,6 +2068,14 @@
               <label>진행상태 (복수선택 가능)</label>
               <div class="status-grid" id="dash-status-grid">
                 ${STATUS_LIST.map(s=>`<div class="status-opt ${dashFilter.status.includes(s.k)?'active':''}" data-dash-status="${s.k}">${s.k}</div>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>지점 (복수선택 가능)</label>
+              <div class="status-grid" id="dash-branch-grid">
+                ${branchOptionsFromCustomers().map(b=>`<div class="status-opt ${dashFilter.branch.includes(b.norm)?'active':''}" data-dash-branch="${escapeAttr(b.norm)}">${escapeHtml(b.label)}</div>`).join('') || '<div style="font-size:12px;color:var(--ink-dim);">등록된 접수지점이 없어요</div>'}
               </div>
             </div>
           </div>
@@ -2125,6 +2155,14 @@
         const k = el.getAttribute('data-dash-status');
         const idx = dashFilter.status.indexOf(k);
         if(idx>=0) dashFilter.status.splice(idx,1); else dashFilter.status.push(k);
+        render();
+      };
+    });
+    document.querySelectorAll('#dash-branch-grid .status-opt').forEach(el=>{
+      el.onclick = ()=>{
+        const k = el.getAttribute('data-dash-branch');
+        const idx = dashFilter.branch.indexOf(k);
+        if(idx>=0) dashFilter.branch.splice(idx,1); else dashFilter.branch.push(k);
         render();
       };
     });
