@@ -365,7 +365,20 @@
   let stateReady = false;
   let apartmentSites = [];
   let siteEditId = null;
-  let dashFilter = { period:'all', product:[], status:[], from:'', to:'', day:'', month:'' };
+  let dashFilter = { period:'all', product:[], status:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
+  function mondayWeekRange(dateStr){
+    if(!dateStr) return null;
+    const d = new Date(dateStr+'T00:00:00');
+    if(isNaN(d.getTime())) return null;
+    const day = d.getDay(); // 0=Sun..6=Sat
+    const diffToMonday = day===0 ? -6 : (1-day);
+    const monday = new Date(d);
+    monday.setDate(d.getDate()+diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate()+6);
+    const fmt = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+    return { start: fmt(monday), end: fmt(sunday) };
+  }
   let bulkSmsSelected = [];      // array of customer ids, in selection order (max 100)
   let bulkSmsQuery = '';
   let bulkSmsMessage = '';
@@ -1288,13 +1301,19 @@
     const y = t.getFullYear(); const m = String(t.getMonth()+1).padStart(2,'0'); const d = String(t.getDate()).padStart(2,'0');
     return `${y}-${m}-${d}`;
   }
-  let homeDateFilter = { date: localToday(), showBalance: true, showConsult: false };
+  let homeDateFilter = { mode:'day', date: localToday(), weekAnchor: localToday(), showBalance: true, showConsult: false };
   function homeDateResults(){
-    const { date, showBalance, showConsult } = homeDateFilter;
+    const { mode, date, weekAnchor, showBalance, showConsult } = homeDateFilter;
+    const wk = mode==='week' ? mondayWeekRange(weekAnchor) : null;
+    function hit(dateStr){
+      if(!dateStr) return false;
+      if(mode==='week') return !wk || (dateStr>=wk.start && dateStr<=wk.end);
+      return dateStr===date;
+    }
     const out = [];
     customers.forEach(c=>{
-      const balanceHit = showBalance && c.balanceDate === date;
-      const consultHit = showConsult && c.consultDate && c.consultDate.slice(0,10) === date;
+      const balanceHit = showBalance && hit(c.balanceDate);
+      const consultHit = showConsult && c.consultDate && hit(c.consultDate.slice(0,10));
       if(balanceHit || consultHit) out.push({ c, balanceHit, consultHit });
     });
     return out;
@@ -1407,7 +1426,10 @@
           <div class="stat-chip"><div class="n">${avgDsr?avgDsr.toFixed(1):'-'}${avgDsr?'%':''}</div><div class="l">평균 DSR</div></div>
         </div>
         <div class="search-row">
-          <input class="search-input" id="search-input" placeholder="이름·연락처·아파트명·동호수 검색" value="${escapeAttr(query)}"/>
+          <div style="position:relative;flex:1;">
+            <input class="search-input" id="search-input" placeholder="이름·연락처·아파트명·동호수 검색" value="${escapeAttr(query)}" style="width:100%;box-sizing:border-box;padding-right:34px;"/>
+            <button type="button" id="btn-search-clear" style="display:${query?'flex':'none'};position:absolute;right:6px;top:0;bottom:0;margin:auto;height:26px;width:26px;align-items:center;justify-content:center;background:var(--line);border:none;border-radius:50%;color:var(--ink-dim);font-size:14px;cursor:pointer;padding:0;">✕</button>
+          </div>
           <button class="add-btn" id="btn-new">+ 새 고객</button>
         </div>
         <div class="search-row" style="margin-top:-4px;">
@@ -1422,17 +1444,23 @@
         ${backupNoticeHtml()}
         ${(()=>{
           const results = homeDateResults();
-          const { date, showBalance, showConsult } = homeDateFilter;
+          const { mode, date, weekAnchor, showBalance, showConsult } = homeDateFilter;
+          const wkRange = mode==='week' ? mondayWeekRange(weekAnchor) : null;
           return `<div style="background:#FFF4E5;border:1.5px solid var(--amber);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#5A3E00;">
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-              <input type="date" id="f-home-date" value="${escapeAttr(date)}" style="border:1.5px solid var(--amber);border-radius:6px;padding:4px 6px;font-size:12px;"/>
+              <span class="badge home-date-mode" data-mode="day" style="cursor:pointer;background:${mode==='day'?'var(--amber)':'#fff'};color:${mode==='day'?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">하루</span>
+              <span class="badge home-date-mode" data-mode="week" style="cursor:pointer;background:${mode==='week'?'var(--amber)':'#fff'};color:${mode==='week'?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">일주일</span>
+              ${mode==='week'
+                ? `<input type="date" id="f-home-week" value="${escapeAttr(weekAnchor)}" style="border:1.5px solid var(--amber);border-radius:6px;padding:4px 6px;font-size:12px;"/>`
+                : `<input type="date" id="f-home-date" value="${escapeAttr(date)}" style="border:1.5px solid var(--amber);border-radius:6px;padding:4px 6px;font-size:12px;"/>`}
+            </div>
+            ${mode==='week' && wkRange ? `<div style="margin-top:6px;font-weight:700;">${wkRange.start} (월) ~ ${wkRange.end} (일)</div>` : ''}
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;">
               <span class="badge home-date-toggle" data-type="balance" style="cursor:pointer;background:${showBalance?'var(--amber)':'#fff'};color:${showBalance?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">잔금일${showBalance?' ✓':''}</span>
               <span class="badge home-date-toggle" data-type="consult" style="cursor:pointer;background:${showConsult?'var(--amber)':'#fff'};color:${showConsult?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">대출자서일${showConsult?' ✓':''}</span>
             </div>
             ${results.length===0 ? `<div style="margin-top:8px;color:#8A6A20;">선택한 날짜·조건에 해당하는 고객이 없어요.</div>` : `
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-              ${results.map(({c,balanceHit,consultHit})=>`<span class="badge today-balance-chip" data-id="${c.id}" style="cursor:pointer;background:#fff;border:1.5px solid var(--amber);color:#5A3E00;">${escapeHtml(c.name)||'이름 미입력'}${c.apartmentName?' · '+escapeHtml(c.apartmentName)+(c.unitNumber?' '+escapeHtml(c.unitNumber):''):''}${balanceHit&&consultHit?' (잔금·자서)':balanceHit?' (잔금)':consultHit?' (자서)':''}</span>`).join('')}
-            </div>`}
+            <div style="margin-top:10px;">${renderListCardsHtml(results.map(r=>r.c))}</div>`}
           </div>`;
         })()}
         ${(()=>{
@@ -1442,6 +1470,7 @@
             📅 <b>잔금일이 지난 진행중 건이 ${passed.length}건</b> 있어요.<br/>
             실제로 실행됐다면 아래 버튼으로 한 번에 실행완료 처리할 수 있어요. 연기·무산된 건은 개별로 확인해주세요.
             <button class="add-loan-btn" id="btn-bulk-complete" style="width:100%;margin-top:8px;background:#33499A;border:1.5px solid #33499A;color:#fff;">✅ ${passed.length}건 모두 실행완료로 변경</button>
+            <div style="margin-top:10px;">${renderListCardsHtml(passed)}</div>
           </div>`;
         })()}
         <div class="search-row" style="margin-top:-4px;">
@@ -1463,9 +1492,11 @@
 
     (function(){
       const searchEl = document.getElementById('search-input');
+      const clearBtn = document.getElementById('btn-search-clear');
       let isComposing = false;
       function commitSearch(e){
         query = e.target.value;
+        if(clearBtn) clearBtn.style.display = query ? 'flex' : 'none';
         updateListBodyOnly();
       }
       searchEl.addEventListener('compositionstart', ()=>{ isComposing = true; });
@@ -1474,6 +1505,13 @@
         if(isComposing) return; // ignore intermediate events while Korean/CJK IME is composing
         commitSearch(e);
       });
+      if(clearBtn) clearBtn.onclick = ()=>{
+        query = '';
+        searchEl.value = '';
+        clearBtn.style.display = 'none';
+        updateListBodyOnly();
+        searchEl.focus();
+      };
     })();
     document.getElementById('btn-new').onclick = ()=>{
       const c = blankCustomer();
@@ -1484,6 +1522,11 @@
     };
     const homeDateEl = document.getElementById('f-home-date');
     if(homeDateEl) homeDateEl.onchange = (e)=>{ homeDateFilter.date = e.target.value; renderList(); };
+    const homeWeekEl = document.getElementById('f-home-week');
+    if(homeWeekEl) homeWeekEl.onchange = (e)=>{ homeDateFilter.weekAnchor = e.target.value; renderList(); };
+    document.querySelectorAll('.home-date-mode').forEach(el=>{
+      el.onclick = ()=>{ homeDateFilter.mode = el.getAttribute('data-mode'); renderList(); };
+    });
     document.querySelectorAll('.home-date-toggle').forEach(el=>{
       el.onclick = ()=>{
         const t = el.getAttribute('data-type');
@@ -1506,7 +1549,7 @@
         e.stopPropagation();
         const id = el.getAttribute('data-memo-id');
         expandedMemoId = (expandedMemoId===id) ? null : id;
-        updateListBodyOnly();
+        renderList();
       };
     });
     document.querySelectorAll('.memo-preview').forEach(el=>{
@@ -1924,23 +1967,24 @@
     const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
     const nd = new Date(now.getFullYear(), now.getMonth()+1, 1);
     const nextMonthKey = `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}`;
+    const wk = dashFilter.period==='week' ? mondayWeekRange(dashFilter.weekAnchor) : null;
+    function dateMatches(dateStr){
+      if(!dateStr) return false;
+      if(dashFilter.period==='thisMonth') return monthKey(dateStr)===thisMonthKey;
+      if(dashFilter.period==='nextMonth') return monthKey(dateStr)===nextMonthKey;
+      if(dashFilter.period==='month') return !dashFilter.month || monthKey(dateStr)===dashFilter.month;
+      if(dashFilter.period==='day') return !dashFilter.day || dateStr===dashFilter.day;
+      if(dashFilter.period==='week') return !wk || (dateStr>=wk.start && dateStr<=wk.end);
+      if(dashFilter.period==='custom') return (!dashFilter.from || dateStr>=dashFilter.from) && (!dashFilter.to || dateStr<=dashFilter.to);
+      return true;
+    }
     return customers.filter(c=>{
-      if(dashFilter.period!=='all' && !c.balanceDate) return false;
       if(dashFilter.product.length>0 && !dashFilter.product.includes(dashProductToken(c))) return false;
       if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
-      if(dashFilter.period==='thisMonth' && monthKey(c.balanceDate)!==thisMonthKey) return false;
-      if(dashFilter.period==='nextMonth' && monthKey(c.balanceDate)!==nextMonthKey) return false;
-      if(dashFilter.period==='month'){
-        if(dashFilter.month && monthKey(c.balanceDate)!==dashFilter.month) return false;
-      }
-      if(dashFilter.period==='day'){
-        if(dashFilter.day && c.balanceDate!==dashFilter.day) return false;
-      }
-      if(dashFilter.period==='custom'){
-        if(dashFilter.from && c.balanceDate < dashFilter.from) return false;
-        if(dashFilter.to && c.balanceDate > dashFilter.to) return false;
-      }
-      return true;
+      if(dashFilter.period==='all') return true;
+      const balHit = dashFilter.showBalance && dateMatches(c.balanceDate);
+      const consultHit = dashFilter.showConsult && c.consultDate && dateMatches(c.consultDate.slice(0,10));
+      return balHit || consultHit;
     }).sort((a,b)=> (a.balanceDate||'').localeCompare(b.balanceDate||''));
   }
 
@@ -1972,12 +2016,23 @@
                 <option value="all" ${dashFilter.period==='all'?'selected':''}>전체</option>
                 <option value="thisMonth" ${dashFilter.period==='thisMonth'?'selected':''}>이번달</option>
                 <option value="nextMonth" ${dashFilter.period==='nextMonth'?'selected':''}>다음달</option>
+                <option value="week" ${dashFilter.period==='week'?'selected':''}>일주일 선택</option>
                 <option value="month" ${dashFilter.period==='month'?'selected':''}>월별 선택</option>
                 <option value="day" ${dashFilter.period==='day'?'selected':''}>특정일 선택</option>
                 <option value="custom" ${dashFilter.period==='custom'?'selected':''}>기간(범위) 선택</option>
               </select>
             </div>
           </div>
+          ${dashFilter.period!=='all' ? `
+          <div class="field-row">
+            <div class="field">
+              <label>기준 날짜 (중복선택 가능)</label>
+              <div style="display:flex;gap:6px;">
+                <span class="badge dash-date-target" data-target="balance" style="cursor:pointer;background:${dashFilter.showBalance?'var(--amber)':'#fff'};color:${dashFilter.showBalance?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">잔금일${dashFilter.showBalance?' ✓':''}</span>
+                <span class="badge dash-date-target" data-target="consult" style="cursor:pointer;background:${dashFilter.showConsult?'var(--amber)':'#fff'};color:${dashFilter.showConsult?'#fff':'#5A3E00'};border:1.5px solid var(--amber);">대출자서일${dashFilter.showConsult?' ✓':''}</span>
+              </div>
+            </div>
+          </div>` : ''}
           <div class="field-row">
             <div class="field">
               <label>대출상품 (복수선택 가능)</label>
@@ -2002,6 +2057,14 @@
             <div class="field"><label>종료일</label><input type="date" id="f-dash-to" value="${escapeAttr(dashFilter.to)}"/></div>
             <div class="field"></div>
           </div>` : ''}
+          ${dashFilter.period==='week' ? (()=>{
+            const wr = mondayWeekRange(dashFilter.weekAnchor);
+            return `
+          <div class="field-row">
+            <div class="field"><label>주 선택 (아무 날짜나 선택)</label><input type="date" id="f-dash-week" value="${escapeAttr(dashFilter.weekAnchor)}"/></div>
+            <div class="field">${wr?`<label>&nbsp;</label><div style="font-weight:700;padding-top:6px;">${wr.start} (월) ~ ${wr.end} (일)</div>`:''}</div>
+          </div>`;
+          })() : ''}
           ${dashFilter.period==='month' ? `
           <div class="field-row">
             <div class="field"><label>월 선택</label><input type="month" id="f-dash-month" value="${escapeAttr(dashFilter.month)}"/></div>
@@ -2073,6 +2136,16 @@
     if(monthEl) monthEl.onchange = (e)=>{ dashFilter.month = e.target.value; render(); };
     const dayEl = document.getElementById('f-dash-day');
     if(dayEl) dayEl.onchange = (e)=>{ dashFilter.day = e.target.value; render(); };
+    const weekEl = document.getElementById('f-dash-week');
+    if(weekEl) weekEl.onchange = (e)=>{ dashFilter.weekAnchor = e.target.value; render(); };
+    document.querySelectorAll('.dash-date-target').forEach(el=>{
+      el.onclick = ()=>{
+        const t = el.getAttribute('data-target');
+        if(t==='balance') dashFilter.showBalance = !dashFilter.showBalance;
+        else if(t==='consult') dashFilter.showConsult = !dashFilter.showConsult;
+        render();
+      };
+    });
     document.querySelectorAll('#app-root .card[data-id]').forEach(el=>{
       el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; detailReturnView = 'balanceDash'; render(); };
     });
