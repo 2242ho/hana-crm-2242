@@ -1348,6 +1348,8 @@
       .filter(Boolean).join(' ').toLowerCase();
   }
 
+  let selectMode = false;
+  let selectedIds = new Set();
   function renderListCardsHtml(filtered){
     let html = '';
     if(filtered.length===0){
@@ -1367,6 +1369,7 @@
         const dsrColor = d.dsr===0 ? '' : (d.dsr>d.limit ? 'color:var(--red)' : d.dsr>d.limit-10 ? 'color:var(--amber)' : 'color:var(--green)');
         html += `
         <div class="card" data-id="${c.id}">
+          ${selectMode ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" class="select-check" data-select-id="${c.id}" ${selectedIds.has(c.id)?'checked':''} style="width:18px;height:18px;"/><span style="font-size:11.5px;color:var(--ink-dim);">선택해서 삭제</span></div>` : ''}
           <div class="card-top">
             <div>
               <div class="card-name">${escapeHtml(c.name)||'이름 미입력'}</div>
@@ -1403,15 +1406,38 @@
         e.stopPropagation();
         const id = el.getAttribute('data-memo-id');
         expandedMemoId = (expandedMemoId===id) ? null : id;
-        updateListBodyOnly();
+        renderList();
       };
     });
     container.querySelectorAll('.memo-preview').forEach(el=>{
       el.onclick = (e)=>{ e.stopPropagation(); };
     });
-    container.querySelectorAll('.card').forEach(el=>{
-      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render(); };
+    container.querySelectorAll('.select-check').forEach(el=>{
+      el.onclick = (e)=>{ e.stopPropagation(); };
+      el.onchange = ()=>{
+        const id = el.getAttribute('data-select-id');
+        if(el.checked) selectedIds.add(id); else selectedIds.delete(id);
+        updateSelectBar();
+      };
     });
+    container.querySelectorAll('.card').forEach(el=>{
+      el.onclick = ()=>{
+        const id = el.getAttribute('data-id');
+        if(selectMode){
+          if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+          renderList();
+          return;
+        }
+        currentId = id; view='detail'; branchCustomMode = false; detailReturnView = 'list'; render();
+      };
+    });
+  }
+  function updateSelectBar(){
+    const bar = document.getElementById('select-action-bar');
+    if(!bar) return;
+    const n = selectedIds.size;
+    bar.querySelector('.select-count').textContent = `${n}건 선택됨`;
+    bar.querySelector('.select-delete-btn').disabled = n===0;
   }
   function filteredCustomers(){
     return customers.filter(c=>{
@@ -1462,8 +1488,9 @@
           <input type="file" id="import-file-input" accept="application/json" style="display:none;"/>
           <input type="file" id="import-file-input-replace" accept="application/json" style="display:none;"/>
         </div>
-        <div class="search-row" style="margin-top:-8px;justify-content:flex-end;">
+        <div class="search-row" style="margin-top:-8px;justify-content:space-between;">
           <button id="btn-import-replace" style="background:none;border:none;color:var(--ink-dim);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;">기존 목록 전체교체로 불러오기</button>
+          <button id="btn-select-mode" style="background:none;border:none;color:${selectMode?'var(--red)':'var(--ink-dim)'};font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;">${selectMode?'선택삭제 취소':'🗑️ 여러 명 선택삭제'}</button>
         </div>
         ${backupNoticeHtml()}
         ${(()=>{
@@ -1510,8 +1537,14 @@
           <button class="add-loan-btn" id="btn-bulk-sms" style="flex:1;margin-top:0;background:var(--amber);border:1.5px solid var(--amber);color:#FFFFFF;">📨 문자 대량발송 (최대 500명)</button>
         </div>
         <div id="list-body">${renderListCardsHtml(filtered)}</div>
+        ${selectMode ? `<div style="height:70px;"></div>` : ''}
       </div>
-      <div class="disclaimer">DSR 계산 결과는 참고용 추정치이며, 실제 금융회사 심사 기준과 다를 수 있습니다.</div>`;
+      <div class="disclaimer">DSR 계산 결과는 참고용 추정치이며, 실제 금융회사 심사 기준과 다를 수 있습니다.</div>
+      ${selectMode ? `
+      <div id="select-action-bar" style="position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--navy-950);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 -4px 16px rgba(0,0,0,0.2);">
+        <span class="select-count" style="font-weight:700;font-size:13px;">${selectedIds.size}건 선택됨</span>
+        <button class="select-delete-btn" id="btn-select-delete" ${selectedIds.size===0?'disabled':''} style="margin-left:auto;background:var(--red);border:none;color:#fff;font-weight:800;padding:10px 18px;border-radius:8px;font-size:13px;${selectedIds.size===0?'opacity:0.5;':'cursor:pointer;'}">🗑️ 선택 삭제</button>
+      </div>` : ''}`;
     root.innerHTML = html;
 
     (function(){
@@ -1565,21 +1598,25 @@
         currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render();
       };
     });
-    document.querySelectorAll('.card').forEach(el=>{
-      el.onclick = ()=>{ currentId = el.getAttribute('data-id'); view='detail'; branchCustomMode = false; detailReturnView = 'list'; render(); };
-    });
-    document.querySelectorAll('.badge-memo').forEach(el=>{
-      el.onclick = (e)=>{
-        e.stopPropagation();
-        const id = el.getAttribute('data-memo-id');
-        expandedMemoId = (expandedMemoId===id) ? null : id;
-        renderList();
-      };
-    });
-    document.querySelectorAll('.memo-preview').forEach(el=>{
-      el.onclick = (e)=>{ e.stopPropagation(); };
-    });
+    bindListCardEvents(document);
     document.getElementById('btn-export').onclick = ()=> exportBackup();
+    const selectModeBtn = document.getElementById('btn-select-mode');
+    if(selectModeBtn) selectModeBtn.onclick = ()=>{
+      selectMode = !selectMode;
+      selectedIds.clear();
+      renderList();
+    };
+    const selectDeleteBtn = document.getElementById('btn-select-delete');
+    if(selectDeleteBtn) selectDeleteBtn.onclick = ()=>{
+      if(selectedIds.size===0) return;
+      if(confirm(`선택한 ${selectedIds.size}명의 고객 정보를 삭제할까요? 되돌릴 수 없습니다.`)){
+        customers = customers.filter(c=>!selectedIds.has(c.id));
+        selectedIds.clear();
+        selectMode = false;
+        saveCustomers(false);
+        renderList();
+      }
+    };
     const bulkCompleteBtn = document.getElementById('btn-bulk-complete');
     if(bulkCompleteBtn) bulkCompleteBtn.onclick = ()=>{
       const passed = balancePassedList();
