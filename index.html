@@ -365,7 +365,7 @@
   let stateReady = false;
   let apartmentSites = [];
   let siteEditId = null;
-  let dashFilter = { period:'all', product:[], status:[], branch:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
+  let dashFilter = { period:'all', product:[], apt:[], status:[], branch:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
   function branchNorm(s){ return (s||'').replace(/지점$/,'').trim(); }
   function branchMatches(customerBranch, normKey){
     if(!customerBranch || !normKey) return false;
@@ -2041,7 +2041,8 @@
     }
     return customers.filter(c=>{
       if(dashFilter.product.length>0 && !dashFilter.product.includes(dashProductToken(c))) return false;
-      if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
+      if(dashFilter.apt.length>0 && !dashFilter.apt.some(id=>{ const st=apartmentSites.find(x=>x.id===id); return c.jipdanSiteId===id || (st && c.apartmentName && c.apartmentName===st.name); })) return false;
+    if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
       if(dashFilter.branch.length>0 && !dashFilter.branch.some(kw=>branchMatches(c.receivingBranch, kw))) return false;
       if(dashFilter.period==='all') return true;
       const balHit = dashFilter.showBalance && dateMatches(c.balanceDate);
@@ -2100,6 +2101,14 @@
               <label>대출상품 (복수선택 가능)</label>
               <div class="status-grid" id="dash-product-grid">
                 ${DASH_PRODUCT_OPTIONS.map(p=>`<div class="status-opt ${dashFilter.product.includes(p.key)?'active':''}" data-dash-product="${p.key}">${p.label}</div>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>집단대출 아파트 (복수선택 가능)</label>
+              <div class="status-grid" id="dash-apt-grid">
+                ${apartmentSites.map(a=>`<div class="status-opt ${dashFilter.apt.includes(a.id)?'active':''}" data-dash-apt="${escapeAttr(a.id)}">${escapeHtml(a.name)}</div>`).join('') || '<div style="font-size:12px;color:var(--ink-dim);">아파트현장관리에 등록된 아파트가 없어요</div>'}
               </div>
             </div>
           </div>
@@ -2187,6 +2196,14 @@
         const k = el.getAttribute('data-dash-product');
         const idx = dashFilter.product.indexOf(k);
         if(idx>=0) dashFilter.product.splice(idx,1); else dashFilter.product.push(k);
+        render();
+      };
+    });
+    document.querySelectorAll('#dash-apt-grid .status-opt').forEach(el=>{
+      el.onclick = ()=>{
+        const k = el.getAttribute('data-dash-apt');
+        const idx = dashFilter.apt.indexOf(k);
+        if(idx>=0) dashFilter.apt.splice(idx,1); else dashFilter.apt.push(k);
         render();
       };
     });
