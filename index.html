@@ -835,7 +835,7 @@
   // ---------- 아파트현장(집단대출) 저장소 ----------
   const SITES_STORAGE_KEY = 'loan_crm_apartment_sites_v1';
   function blankSite(){
-    return { id: uid(), name:'', units:[], rateOptions:[], lawFirm:'', moveInPeriod:'' };
+    return { id: uid(), name:'', units:[], rateOptions:[], lawFirm:'', moveInPeriod:'', preferType:'' };
   }
   function blankSiteUnit(){ return { id: uid(), area:'', floors:[blankSiteFloor()] }; }
   function blankSiteFloor(){ return { id: uid(), label:'', price:'' }; }
@@ -853,11 +853,14 @@
     }
   }
   function ensureSeedSitePresent(){
-    const exists = apartmentSites.some(s=>s.name==='탕정푸르지오리버파크');
-    if(!exists){
-      apartmentSites.push(seedDefaultSite());
-      saveSites();
+    let changed = false;
+    if(!apartmentSites.some(s=>s.name==='탕정푸르지오리버파크')){
+      apartmentSites.push(seedDefaultSite()); changed = true;
     }
+    if(!apartmentSites.some(s=>s.name.includes('탕정인피니티시티'))){
+      apartmentSites.push(seedInfinitySite()); changed = true;
+    }
+    if(changed) saveSites();
   }
   function saveSites(showToast){
     try{
@@ -893,6 +896,19 @@
       lawFirm:'아크로법무법인',
       moveInPeriod:'26.8.10 ~ 26.10.8',
     };
+  }
+  function seedInfinitySite(){
+    return {
+      id: uid(), name:'탕정인피니티시티1차', units:[],
+      rateOptions:[ { id:uid(), label:'신규코픽스6개월변동+2.1%', addRate:'2.1' } ],
+      lawFirm:'', moveInPeriod:'', preferType:'jutaek',
+    };
+  }
+  // 현장별 우대항목: 'jutaek' = 주담대와 동일(최대 0.9%), 기본 = 미성년자녀(최대 0.3%)
+  function jipdanPreferCfg(c){
+    const site = apartmentSites.find(x=>x.id===c.jipdanSiteId);
+    if(site && site.preferType==='jutaek') return { items: PREFER_ITEMS, max:'0.9%' };
+    return { items: JIPDAN_PREFER_ITEMS, max:'0.3%' };
   }
   function siteRateSheetType(label){
     if(!label) return '';
@@ -3350,7 +3366,8 @@
     const s = c.sheet;
     const d = computeDSR(c);
     const isAkkime = c.jipdanSubType==='아낌이보금자리';
-    const finalRate = isAkkime ? (parseFloat(s.fixedRate)||0) : sheetFinalRate(s,'baseRate','addRate',true,JIPDAN_PREFER_ITEMS);
+    const JP = jipdanPreferCfg(c);
+    const finalRate = isAkkime ? (parseFloat(s.fixedRate)||0) : sheetFinalRate(s,'baseRate','addRate',true,JP.items);
     const years = monthsToYearsLabel(c.newLoan.months);
     const applied = (parseFloat(stripComma(c.newLoan.amount))||0)*10000;
     const jipdanAppraisal = (parseFloat(stripComma(c.jipdanAppraisal))||0)*10000;
@@ -3394,9 +3411,9 @@
           <label>금리 (%)</label>
           <input type="number" step="0.001" data-skey="fixedRate" value="${s.fixedRate||''}" placeholder="금리"/>
         </div>
-      ` : rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true,items:JIPDAN_PREFER_ITEMS})}</div>
+      ` : rateFormulaBlock(s,{baseKey:'baseRate',addKey:'addRate',hasPrefer:true,items:JP.items})}</div>
 
-      ${isAkkime ? '' : sheetPreferBlock(s,'3. 우대금리항목',JIPDAN_PREFER_ITEMS,'0.3%')}
+      ${isAkkime ? '' : sheetPreferBlock(s,'3. 우대금리항목',JP.items,JP.max)}
 
       <div class="sheet-bar">${isAkkime?3:4}. 중도상환수수료</div>
       <div class="sheet-box">
@@ -3880,6 +3897,14 @@
             `).join('')}
           </div>
           <button class="add-loan-btn" id="btn-add-rate">+ 금리옵션 추가</button>
+          <div class="field-row" style="margin-top:10px;">
+            <div class="field"><label>우대금리항목</label>
+              <select id="s-preferType">
+                <option value="" ${s.preferType!=='jutaek'?'selected':''}>미성년자녀 우대 (최대 0.3%)</option>
+                <option value="jutaek" ${s.preferType==='jutaek'?'selected':''}>주담대와 동일 (급여/청약/카드, 최대 0.9%)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div class="save-bar">
@@ -3893,7 +3918,7 @@
     root.innerHTML = html;
 
     function readSiteForm(){
-      s.name = val('s-name'); s.lawFirm = val('s-lawFirm'); s.moveInPeriod = val('s-moveInPeriod');
+      s.preferType = val('s-preferType'); s.name = val('s-name'); s.lawFirm = val('s-lawFirm'); s.moveInPeriod = val('s-moveInPeriod');
       document.querySelectorAll('.su-area').forEach(el=>{ s.units[parseInt(el.getAttribute('data-uidx'))].area = el.value; });
       document.querySelectorAll('.su-flabel').forEach(el=>{
         const ui = parseInt(el.getAttribute('data-uidx')), fi = parseInt(el.getAttribute('data-fidx'));
@@ -3908,7 +3933,7 @@
     }
     function val(id){ const e=document.getElementById(id); return e? e.value : ''; }
 
-    root.querySelectorAll('input').forEach(el=> el.addEventListener('change', ()=>{ readSiteForm(); }));
+    root.querySelectorAll('input,select').forEach(el=> el.addEventListener('change', ()=>{ readSiteForm(); }));
 
     document.getElementById('btn-siteedit-back').onclick = ()=>{ readSiteForm(); saveSites(false); view='sites'; render(); };
     document.getElementById('btn-add-unit').onclick = ()=>{ readSiteForm(); s.units.push(blankSiteUnit()); renderSiteEdit(); };
@@ -3953,8 +3978,9 @@
     if(c.loanProduct==='집단대출'){
       const ltvPct = houseTypeLTV(c.jipdanHouseType, c.jipdanDisposalCond);
       const isAkkime = c.jipdanSubType==='아낌이보금자리';
-      const finalRate = isAkkime ? (parseFloat(s.fixedRate)||0) : sheetFinalRate(s,'baseRate','addRate',true,JIPDAN_PREFER_ITEMS);
-      const preferOn = JIPDAN_PREFER_ITEMS.filter(p=>s[p.key]).map(p=>p.label);
+      const JP = jipdanPreferCfg(c);
+      const finalRate = isAkkime ? (parseFloat(s.fixedRate)||0) : sheetFinalRate(s,'baseRate','addRate',true,JP.items);
+      const preferOn = JP.items.filter(p=>s[p.key]).map(p=>p.label);
       lines.push('▶ 대출 기본 정보');
       if(c.apartmentName) lines.push(`아파트명: ${c.apartmentName}${c.unitNumber?' ('+c.unitNumber+')':''}`);
       if(c.jipdanHouseType) lines.push(`주택유형: ${c.jipdanHouseType}${c.jipdanDisposalCond?' (잔금당일 처분조건)':''}  ·  LTV ${ltvPct}%`);
@@ -3974,11 +4000,11 @@
         lines.push('');
       } else {
         lines.push('▶ 금리 (최종금리는 대출실행 당일에 확정됨)');
-        lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s,JIPDAN_PREFER_ITEMS).toFixed(1)}% = 최종 ${finalRate.toFixed(3)}%`);
+        lines.push(`기준금리 ${s.baseRate||0}% + 가산금리 ${s.addRate||0}% - 우대금리 ${preferTotal(s,JP.items).toFixed(1)}% = 최종 ${finalRate.toFixed(3)}%`);
         lines.push('');
-        lines.push('▶ 우대금리항목 (최대 0.3%)');
-        lines.push(JIPDAN_PREFER_ITEMS.map(p=>`${s[p.key]?'☑':'☐'} ${p.label} (${p.pct}%)`).join('\n'));
-        lines.push(`우대금리 합계: ${preferTotal(s,JIPDAN_PREFER_ITEMS).toFixed(1)}%`);
+        lines.push(`▶ 우대금리항목 (최대 ${JP.max})`);
+        lines.push(JP.items.map(p=>`${s[p.key]?'☑':'☐'} ${p.label} (${p.pct}%)`).join('\n'));
+        lines.push(`우대금리 합계: ${preferTotal(s,JP.items).toFixed(1)}%`);
         lines.push('');
       }
       lines.push('▶ 중도상환수수료');
