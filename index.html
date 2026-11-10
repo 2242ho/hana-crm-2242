@@ -857,8 +857,12 @@
     if(!apartmentSites.some(s=>s.name==='탕정푸르지오리버파크')){
       apartmentSites.push(seedDefaultSite()); changed = true;
     }
-    if(!apartmentSites.some(s=>s.name.includes('탕정인피니티시티'))){
+    const inf = apartmentSites.find(s=>s.name.includes('탕정인피니티'));
+    if(!inf){
       apartmentSites.push(seedInfinitySite()); changed = true;
+    } else {
+      if(inf.preferType!=='jutaek'){ inf.preferType='jutaek'; changed = true; }
+      if(!(inf.rateOptions||[]).length){ inf.rateOptions=[{ id:uid(), label:'신규코픽스6개월변동+2.1%', addRate:'2.1' }]; changed = true; }
     }
     if(changed) saveSites();
   }
@@ -906,8 +910,8 @@
   }
   // 현장별 우대항목: 'jutaek' = 주담대와 동일(최대 0.9%), 기본 = 미성년자녀(최대 0.3%)
   function jipdanPreferCfg(c){
-    const site = apartmentSites.find(x=>x.id===c.jipdanSiteId);
-    if(site && site.preferType==='jutaek') return { items: PREFER_ITEMS, max:'0.9%' };
+    const site = apartmentSites.find(x=>x.id===c.jipdanSiteId) || apartmentSites.find(x=>c.apartmentName && x.name===c.apartmentName);
+    if((site && site.preferType==='jutaek') || (c.apartmentName && c.apartmentName.includes('탕정인피니티'))) return { items: PREFER_ITEMS, max:'0.9%' };
     return { items: JIPDAN_PREFER_ITEMS, max:'0.3%' };
   }
   function siteRateSheetType(label){
