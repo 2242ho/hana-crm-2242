@@ -108,6 +108,7 @@
   .badge-purple{background:#EFE5FB;color:#6B3FA0;}
   .badge-green{background:var(--green-bg);color:var(--green);}
   .badge-teal{background:#E4EAFB;color:#227A70;}
+  .badge-ins{background:#FDECEF;color:#B03A5B;}
   .badge-gray{background:#EDEEF2;color:#6B7280;}
   .badge-red{background:var(--red-bg);color:var(--red);}
   .card-meta{display:flex;flex-direction:column;gap:4px;margin-top:9px;font-size:12px;color:var(--ink-dim);}
@@ -365,7 +366,7 @@
   let stateReady = false;
   let apartmentSites = [];
   let siteEditId = null;
-  let dashFilter = { period:'all', product:[], apt:[], status:[], branch:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
+  let dashFilter = { period:'all', product:[], apt:[], ins:[], insCo:[], status:[], branch:[], from:'', to:'', day:'', month:'', weekAnchor:'', showBalance:true, showConsult:false };
   function branchNorm(s){ return (s||'').replace(/지점$/,'').trim(); }
   function branchMatches(customerBranch, normKey){
     if(!customerBranch || !normKey) return false;
@@ -553,6 +554,7 @@
       existingLoans:[],
       sheet:{}, sheetDrawing:'',
       docs:{},
+      insurances:[],
       memo:''
     };
   }
@@ -574,6 +576,25 @@
       return '집단대출:미지정';
     }
     return c.loanProduct;
+  }
+  const INS_STATUS = ['상담중','가입완료','보류/해지'];
+  const INS_TIMING = ['대출과 동시','대출 후 가입','보험만(대출없음)'];
+  const INS_COMPANIES = ['삼성생명','한화생명','교보생명','신한라이프','NH농협생명','하나생명','DB생명','흥국생명','라이나생명','삼성화재','현대해상','DB손해보험','KB손해보험','메리츠화재','하나손해보험','흥국화재'];
+  function blankInsurance(){ return { company:'', product:'', status:'상담중', timing:'', joinDate:'' }; }
+  const DASH_INS_OPTIONS = [
+    {key:'가입완료', label:'보험 가입완료'},
+    {key:'상담중', label:'보험 상담중'},
+    {key:'없음', label:'보험 없음'},
+  ];
+  function insMatchesState(c, key){
+    const list = c.insurances || [];
+    if(key==='없음') return list.length===0;
+    return list.some(i=>i.status===key);
+  }
+  function insCompanyList(){
+    const set = new Set();
+    customers.forEach(c=>(c.insurances||[]).forEach(i=>{ if(i.company && i.company.trim()) set.add(i.company.trim()); }));
+    return Array.from(set).sort();
   }
   const PRODUCT_BADGE = {
     '집단대출':'badge-purple','일반주택담보대출':'badge-blue','전세대출':'badge-teal','기타':'badge-gray'
@@ -734,6 +755,7 @@
       if(!c.incomeInfo) c.incomeInfo = { spouseCombine:false, selfType:'근로소득', selfAmount:c.income||'', selfCard:'', spouseType:'근로소득', spouseAmount:'', spouseCard:'' };
       if(!c.sheet) c.sheet = {};
       if(!c.docs) c.docs = {};
+      if(!Array.isArray(c.insurances)) c.insurances = [];
     });
     stateReady = true;
     render();
@@ -1364,7 +1386,7 @@
   }
 
   function customerSearchBlob(c){
-    return [c.name, allPhones(c).join(' '), c.apartmentName, c.unitNumber, c.receivingBranch, c.realtorName]
+    return [c.name, allPhones(c).join(' '), c.apartmentName, c.unitNumber, c.receivingBranch, c.realtorName, (c.insurances||[]).map(i=>(i.company||'')+' '+(i.product||'')).join(' ')]
       .filter(Boolean).join(' ').toLowerCase();
   }
 
@@ -1398,8 +1420,9 @@
             <span class="badge ${statusColor(c.status)}">${c.status}</span>
           </div>
           ${isBalancePassed(c) ? `<div style="display:flex;margin-top:7px;"><span class="badge badge-amber">📅 잔금일 경과 — 상태 확인 필요</span></div>` : ''}
-          ${(c.loanProduct || c.referralSource || c.receivingBranch || c.memo) ? `<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">
+          ${(c.loanProduct || c.referralSource || c.receivingBranch || c.memo || (c.insurances||[]).length) ? `<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;">
             ${c.loanProduct?`<span class="badge ${PRODUCT_BADGE[c.loanProduct]||'badge-gray'}">${c.loanProduct}${c.jipdanSubType?' ('+c.jipdanSubType+')':''}${c.jeonseSubType?' ('+c.jeonseSubType+')':''}${c.apartmentName?' · '+escapeHtml(c.apartmentName):''}${c.unitNumber?' '+escapeHtml(c.unitNumber):''}</span>`:''}
+            ${(c.insurances||[]).map(i=>`<span class="badge badge-ins">🛡 ${escapeHtml(i.company||'보험사 미입력')}${i.product?' · '+escapeHtml(i.product):''}${i.status==='가입완료'?'':' ('+escapeHtml(i.status||'')+')'}</span>`).join('')}
             ${c.receivingBranch?`<span class="badge badge-gray">접수 ${escapeHtml(c.receivingBranch)}</span>`:''}
             ${c.referralSource?`<span class="badge badge-gray">${c.referralSource}${(c.referralSource==='부동산소장님 소개' && c.realtorName)?' · '+escapeHtml(c.realtorName):''}</span>`:''}
             ${c.lawyerReferral?`<span class="badge badge-gray">법무사연계${c.lawyerName?' · '+escapeHtml(c.lawyerName):''}${c.lawyerWorkType?' ('+c.lawyerWorkType+')':''}</span>`:''}
@@ -2062,7 +2085,9 @@
     return customers.filter(c=>{
       if(dashFilter.product.length>0 && !dashFilter.product.includes(dashProductToken(c))) return false;
       if(dashFilter.apt.length>0 && !dashFilter.apt.some(id=>{ const st=apartmentSites.find(x=>x.id===id); return c.jipdanSiteId===id || (st && c.apartmentName && c.apartmentName===st.name); })) return false;
-    if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
+      if(dashFilter.ins.length>0 && !dashFilter.ins.some(k=>insMatchesState(c,k))) return false;
+      if(dashFilter.insCo.length>0 && !(c.insurances||[]).some(i=>dashFilter.insCo.includes((i.company||'').trim()))) return false;
+      if(dashFilter.status.length>0 && !dashFilter.status.includes(c.status)) return false;
       if(dashFilter.branch.length>0 && !dashFilter.branch.some(kw=>branchMatches(c.receivingBranch, kw))) return false;
       if(dashFilter.period==='all') return true;
       const balHit = dashFilter.showBalance && dateMatches(c.balanceDate);
@@ -2130,6 +2155,17 @@
               <div class="status-grid" id="dash-apt-grid">
                 ${apartmentSites.map(a=>`<div class="status-opt ${dashFilter.apt.includes(a.id)?'active':''}" data-dash-apt="${escapeAttr(a.id)}">${escapeHtml(a.name)}</div>`).join('') || '<div style="font-size:12px;color:var(--ink-dim);">아파트현장관리에 등록된 아파트가 없어요</div>'}
               </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>🛡 보험 (복수선택 가능)</label>
+              <div class="status-grid" id="dash-ins-grid">
+                ${DASH_INS_OPTIONS.map(o=>`<div class="status-opt ${dashFilter.ins.includes(o.key)?'active':''}" data-dash-ins="${o.key}">${o.label}</div>`).join('')}
+              </div>
+              ${insCompanyList().length ? `<div class="status-grid" id="dash-insco-grid" style="margin-top:6px;">
+                ${insCompanyList().map(n=>`<div class="status-opt ${dashFilter.insCo.includes(n)?'active':''}" data-dash-insco="${escapeAttr(n)}">${escapeHtml(n)}</div>`).join('')}
+              </div>` : ''}
             </div>
           </div>
           <div class="field-row">
@@ -2224,6 +2260,22 @@
         const k = el.getAttribute('data-dash-apt');
         const idx = dashFilter.apt.indexOf(k);
         if(idx>=0) dashFilter.apt.splice(idx,1); else dashFilter.apt.push(k);
+        render();
+      };
+    });
+    document.querySelectorAll('#dash-ins-grid .status-opt').forEach(el=>{
+      el.onclick = ()=>{
+        const k = el.getAttribute('data-dash-ins');
+        const idx = dashFilter.ins.indexOf(k);
+        if(idx>=0) dashFilter.ins.splice(idx,1); else dashFilter.ins.push(k);
+        render();
+      };
+    });
+    document.querySelectorAll('#dash-insco-grid .status-opt').forEach(el=>{
+      el.onclick = ()=>{
+        const k = el.getAttribute('data-dash-insco');
+        const idx = dashFilter.insCo.indexOf(k);
+        if(idx>=0) dashFilter.insCo.splice(idx,1); else dashFilter.insCo.push(k);
         render();
       };
     });
@@ -2799,6 +2851,33 @@
           ${dti.income>0 ? `<div class="dsr-status-line" style="background:${dti.dti>dti.limit?'rgba(181,68,58,0.25)':dti.dti>dti.limit-10?'rgba(184,121,30,0.25)':'rgba(47,122,90,0.25)'}">DTI ${dti.dti>dti.limit?`한도 초과 (+${(dti.dti-dti.limit).toFixed(1)}%p)`:dti.dti>dti.limit-10?'한도 근접':'한도 내'}</div>` : ''}
         </div>
 
+        <div class="section" id="sec-insurance">
+          <div class="section-title"><span class="dot"></span>보험 <span style="color:var(--ink-dim);font-weight:600">(${(c.insurances||[]).length}건)</span></div>
+          <datalist id="ins-company-list">${INS_COMPANIES.map(n=>`<option value="${n}">`).join('')}</datalist>
+          <div id="ins-list">
+            ${(c.insurances||[]).map((i,ii)=>`
+            <div class="loan-row ins-row" data-iidx="${ii}">
+              <div class="loan-row-top"><span class="tag">보험 ${ii+1}</span><button class="rm-btn" data-ins-rm="${ii}">삭제</button></div>
+              <div class="field-row">
+                <div class="field"><label>보험회사</label><input class="ins-company" list="ins-company-list" value="${escapeAttr(i.company)}" placeholder="삼성생명"/></div>
+                <div class="field"><label>보험상품명</label><input class="ins-product" value="${escapeAttr(i.product)}" placeholder="상품명"/></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>진행상태</label>
+                  <select class="ins-status">${INS_STATUS.map(t=>`<option ${i.status===t?'selected':''}>${t}</option>`).join('')}</select>
+                </div>
+                <div class="field"><label>가입구분</label>
+                  <select class="ins-timing"><option value="" ${!i.timing?'selected':''}>선택</option>${INS_TIMING.map(t=>`<option ${i.timing===t?'selected':''}>${t}</option>`).join('')}</select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>가입(예정)일</label><input type="date" class="ins-date" value="${escapeAttr(i.joinDate)}"/></div>
+              </div>
+            </div>`).join('')}
+          </div>
+          <button class="add-loan-btn" id="btn-add-ins">+ 보험 추가</button>
+        </div>
+
         <div class="section">
           <div class="section-title collapsible" data-collapse="memo"><span class="dot"></span>메모${c.memo?' <span style="color:var(--ink-dim);font-weight:600;font-size:11.5px;">(작성됨)</span>':''}<span class="caret">${detailCollapsed.memo?'펼치기 ▾':'접기 ▴'}</span></div>
           <div class="section-body ${detailCollapsed.memo?'collapsed':''}" data-collapse-body="memo">
@@ -2914,6 +2993,13 @@
       c.newLoan.stress = document.getElementById('nl-stress').checked;
       c.stressAdd = val('f-stressAdd');
       c.memo = val('f-memo');
+      c.insurances = Array.from(document.querySelectorAll('#ins-list .ins-row')).map(row=>({
+        company: row.querySelector('.ins-company').value.trim(),
+        product: row.querySelector('.ins-product').value.trim(),
+        status: row.querySelector('.ins-status').value,
+        timing: row.querySelector('.ins-timing').value,
+        joinDate: row.querySelector('.ins-date').value,
+      }));
       const rows = document.querySelectorAll('#existing-loans .loan-row');
       c.existingLoans = Array.from(rows).map(row=>({
         type: row.querySelector('.el-type').value,
@@ -3065,6 +3151,23 @@
       c.existingLoans.push({type:'', balance:'', rate:'', months:'', method:'원리금균등', stress:false});
       renderDetail();
     };
+    const addInsBtn = document.getElementById('btn-add-ins');
+    if(addInsBtn) addInsBtn.onclick = ()=>{
+      readForm();
+      const ins = blankInsurance();
+      if(!c.loanProduct) ins.timing = '보험만(대출없음)';
+      c.insurances.push(ins);
+      saveCustomers(false);
+      renderDetail();
+    };
+    document.querySelectorAll('[data-ins-rm]').forEach(el=>{
+      el.onclick = ()=>{
+        readForm();
+        c.insurances.splice(parseInt(el.getAttribute('data-ins-rm')),1);
+        saveCustomers(false);
+        renderDetail();
+      };
+    });
     document.querySelectorAll('[data-rm]').forEach(el=>{
       el.onclick = ()=>{
         readForm();
