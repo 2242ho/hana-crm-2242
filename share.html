@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>대출상담 안내 · 새 주소로 이동 중</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgcng9IjQwIiBmaWxsPSIjMTYyMzNGIi8+PHRleHQgeD0iMTAwIiB5PSIxMzYiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLEFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTA4IiBmb250LXdlaWdodD0iODAwIiBmaWxsPSIjQzk5QjNDIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7rjIA8L3RleHQ+PC9zdmc+">
+<!-- 🔗 옛 손님 공유 링크(2242ho.github.io/hana-crm-2242/share.html?share=...) → 새 손님 화면
+     · 문서 ID(?share=...)와 해시는 그대로 이어 붙여 같은 상담표가 열립니다. -->
+<meta http-equiv="refresh" content="1; url=https://hana-loan-2242.web.app/share.html">
+<script>
+(function () {
+  var SHARE = 'https://hana-loan-2242.web.app/share.html';
+  var search = location.search || '';
+  var hash = location.hash || '';
+  var target = SHARE + search + hash;
+  window.__crmTarget = target;
+  try {
+    location.replace(target);
+  } catch (e) {
+    location.replace(SHARE);
+  }
+})();
+</script>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #F3F4F8; color: #16233F;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    padding: 24px;
+  }
+  .card { width: 100%; max-width: 420px; background: #fff; border-radius: 18px; overflow: hidden;
+          box-shadow: 0 10px 30px rgba(22,35,63,.12); }
+  .head { background: linear-gradient(135deg, #16233F, #0E1728); color: #fff; padding: 22px 20px 20px; }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; color: #C99B3C; font-weight: 700; }
+  .title { font-size: 20px; font-weight: 800; margin-top: 5px; letter-spacing: -.02em; }
+  .body { padding: 26px 22px 24px; text-align: center; }
+  .spinner { width: 34px; height: 34px; margin: 0 auto; border: 3px solid #E3E7EF; border-top-color: #C99B3C;
+             border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .msg { font-size: 15px; font-weight: 800; margin-top: 18px; line-height: 1.5; }
+  .sub { font-size: 12.5px; color: #5A6478; line-height: 1.8; margin-top: 10px; }
+  .btn { display: block; margin-top: 20px; padding: 14px 16px; border-radius: 12px; background: #16233F; color: #fff;
+         font-size: 14px; font-weight: 800; text-decoration: none; }
+  .foot { font-size: 11.5px; color: #8891A3; margin-top: 18px; line-height: 1.7; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <div class="eyebrow">하나은행 · 대출상담</div>
+      <div class="title">상담 안내</div>
+    </div>
+    <div class="body">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="msg">상담표로 이동하고 있어요</div>
+      <div class="sub">주소가 바뀌었습니다.<br>자동으로 이동하지 않으면 아래 버튼을 눌러 주세요.</div>
+      <a class="btn" id="go-link" href="https://hana-loan-2242.web.app/share.html">상담표 열기</a>
+      <div class="foot">하나은행 대출상담사 송명호 · 010-3615-2242</div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var a = document.getElementById('go-link');
+      if (a && window.__crmTarget) a.href = window.__crmTarget;
+    })();
+  </script>
+</body>
+</html>
